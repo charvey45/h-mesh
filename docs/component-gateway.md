@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Gateway components bridge a local Meshtastic RF mesh to the inter-site internet path. In Phase 1, each gateway is a Raspberry Pi host attached by USB to a Heltec ESP32 V3 radio.
+Gateway components bridge a local [Meshtastic](https://meshtastic.org/) RF mesh to the inter-site internet path. In Phase 1, each gateway is a Raspberry Pi host attached by USB to a Heltec ESP32 V3 radio.
 
 ## Component Family
 
@@ -25,7 +25,7 @@ This document covers all `?gxx` devices, including:
 
 ### Gateway Radio
 
-- Participate in local LoRa mesh traffic
+- Participate in local [LoRa](https://www.semtech.com/lora) mesh traffic
 - Receive and transmit on the channels assigned to the gateway role
 - Provide the RF entry and exit point for inter-site traffic
 

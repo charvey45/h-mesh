@@ -6,7 +6,7 @@ Private deployment values must stay out of git history while still allowing repe
 
 ## What Stays Private
 
-- Meshtastic channel secrets and pre-shared keys
+- [Meshtastic](https://meshtastic.org/) channel secrets and pre-shared keys
 - MQTT broker endpoints, usernames, passwords, and certificates
 - exact site addresses and coordinates
 - device management credentials

@@ -2,7 +2,7 @@
 
 ## System Context
 
-The system consists of one or more independent local Meshtastic meshes connected by an internet backbone.
+The system consists of one or more independent local [Meshtastic](https://meshtastic.org/) meshes connected by an internet backbone.
 
 - Each physical site has local radios and sensors.
 - Each fixed site has one Raspberry Pi-assisted gateway pair composed of a Pi and a USB-connected Heltec ESP32 V3.
@@ -50,11 +50,11 @@ flowchart LR
   <img src="assets/raspberry-pi-4.png" width="48%" alt="Raspberry Pi 4 product imagery" />
 </p>
 
-The reference fixed-site gateway pairs a Raspberry Pi host with a Heltec ESP32 V3 radio. Meshtastic provides the RF mesh behavior while the Pi hosts queueing, logging, and bridge policy.
+The reference fixed-site gateway pairs a Raspberry Pi host with a Heltec ESP32 V3 radio. [Meshtastic](https://meshtastic.org/) provides the RF mesh behavior while the Pi hosts queueing, logging, and bridge policy.
 
 ## Logical Flow
 
-1. A local node transmits over LoRa on the relevant site mesh.
+1. A local node transmits over [LoRa](https://www.semtech.com/lora) on the relevant site mesh.
 2. The site gateway radio receives the packet.
 3. The attached Raspberry Pi classifies the packet by channel, origin, and policy.
 4. If the packet is approved for inter-site forwarding, the Pi publishes it to the private MQTT broker.
@@ -66,7 +66,7 @@ The reference fixed-site gateway pairs a Raspberry Pi host with a Heltec ESP32 V
 Each fixed site contains these major elements:
 
 - RF nodes: handheld, vehicle, equipment, sensor, and fixed radios
-- Gateway radio: fixed Meshtastic radio with stable power and antenna placement
+- Gateway radio: fixed [Meshtastic](https://meshtastic.org/) radio with stable power and antenna placement
 - Gateway host: Raspberry Pi responsible for logging, queueing, and bridge policy
 - Local LAN/Wi-Fi: path from the Pi to the internet backbone
 
@@ -74,7 +74,7 @@ Each fixed site contains these major elements:
 
 ### Meshtastic Radio
 
-- Participates in the local LoRa mesh
+- Participates in the local [LoRa](https://www.semtech.com/lora) mesh
 - Transmits and receives site traffic
 - Exposes a serial interface to the gateway host
 - Maintains the on-air channel configuration required for its role

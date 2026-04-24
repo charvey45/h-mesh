@@ -10,7 +10,7 @@ Illustrative imagery in this repository is derived from the official Meshtastic,
 
 ## Design Overview
 
-This design defines a Meshtastic deployment that supports communication across multiple physical sites that are not within direct LoRa radio range of each other.
+This design defines a [Meshtastic](https://meshtastic.org/) deployment that supports communication across multiple physical sites that are not within direct [LoRa](https://www.semtech.com/lora) radio range of each other.
 
 Each site runs a local RF mesh for nearby radios, sensors, and mobile devices. Site gateway components bridge selected traffic over the internet so users and systems at one site can exchange messages with another site.
 
@@ -22,7 +22,7 @@ The design addresses an operating environment where:
 
 - work areas are larger than the coverage of local Wi-Fi or cellular service
 - teams and equipment still need low-power field communication
-- multiple sites have internet access but are outside each other's RF range
+- multiple sites have internet access but are outside each other's [LoRa](https://www.semtech.com/lora) RF range
 - operators need to locate radios, vehicles, people, or assets by position reporting
 - telemetry and automation messages should not be mixed indiscriminately with human chat traffic
 
@@ -39,7 +39,7 @@ The solution combines four layers:
 
 ### Site Gateway
 
-- a fixed Meshtastic gateway radio
+- a fixed [Meshtastic](https://meshtastic.org/) gateway radio
 - a Raspberry Pi host for serial integration, policy, logging, and queueing
 
 ### Inter-Site Backbone
@@ -70,7 +70,7 @@ The design starts with three logical communication classes:
 - `sensor`: telemetry, status, and low-rate machine data
 - `control`: automation and command traffic with stricter policy enforcement
 
-These classes may map to one or more Meshtastic channels during implementation.
+These classes may map to one or more [Meshtastic](https://meshtastic.org/) channels during implementation.
 
 ## Design Principles
 

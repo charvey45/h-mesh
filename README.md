@@ -1,6 +1,6 @@
 # h-mesh
 
-Meshtastic-based design for a multi-site mesh deployment with internet-assisted site bridging, logging, and controlled automation.
+[Meshtastic](https://meshtastic.org/)-based design for a multi-site mesh deployment with internet-assisted site bridging, logging, and controlled automation.
 
 <p align="center">
   <img src="docs/assets/meshtastic-hero-crop.png" width="32%" alt="Meshtastic project imagery" />
@@ -12,13 +12,13 @@ Illustrative imagery in this repository is derived from the official Meshtastic,
 
 ## Design Overview
 
-This design describes a Meshtastic deployment that links separate physical LoRa coverage areas through an internet backhaul while preserving local radio-first operation at each site.
+This design describes a [Meshtastic](https://meshtastic.org/) deployment that links separate physical [LoRa](https://www.semtech.com/lora) coverage areas through an internet backhaul while preserving local radio-first operation at each site.
 
 The baseline model uses a Raspberry Pi and a USB-connected Heltec radio as the gateway at each fixed site. These gateway hosts handle bridge policy, logging, queueing, and controlled automation boundaries while the radios provide local RF access.
 
 ## Problem Statement
 
-Many operating areas have strong local needs for off-grid communication but are split across multiple properties or work zones that cannot reach each other over LoRa alone.
+Many operating areas have strong local needs for off-grid communication but are split across multiple properties or work zones that cannot reach each other over [LoRa](https://www.semtech.com/lora) alone.
 
 Field teams, equipment, and sensors need:
 
@@ -32,7 +32,7 @@ Field teams, equipment, and sensors need:
 
 The proposed solution combines:
 
-- one local Meshtastic mesh per site
+- one local [Meshtastic](https://meshtastic.org/) mesh per site
 - one Pi-assisted gateway per fixed site
 - a private MQTT backbone for inter-site transport
 - per-channel policy for `ops`, `sensor`, and `control` traffic

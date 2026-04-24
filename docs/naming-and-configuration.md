@@ -39,11 +39,11 @@ This means only one device in the fleet may use `01`, regardless of site or type
 - Use lowercase letters for the device code
 - Keep the device code stable for the life of the device
 - Reflect the same code in labels, inventory, and documentation
-- Prefer the device code as the Meshtastic operational name where supported
+- Prefer the device code as the [Meshtastic](https://meshtastic.org/) operational name where supported
 
 ## Intended Config Mapping
 
-The device code should map into Meshtastic-facing metadata and inventory records:
+The device code should map into [Meshtastic](https://meshtastic.org/)-facing metadata and inventory records:
 
 - short operational name: the 4-character code
 - long operational name: a descriptive label such as `Site A Gateway North Barn`
