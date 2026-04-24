@@ -2,7 +2,7 @@
 
 ## Goal
 
-This repository is intended to be public. Private deployment values must stay out of git history while still allowing repeatable builds and deployments.
+Private deployment values must stay out of git history while still allowing repeatable builds and deployments.
 
 ## What Stays Private
 
@@ -30,7 +30,7 @@ Use this split:
 - `config/examples/` for shareable templates
 - `config/private/` for real deployment values
 
-The public repo should never depend on committed secrets. Instead, scripts and services should load values from:
+Versioned project files should never depend on committed secrets. Instead, scripts and services should load values from:
 
 - environment variables
 - local env files outside version control
@@ -66,4 +66,4 @@ GATEWAY_ID=ag01
 - never paste live secrets into markdown
 - never commit screenshots that expose live channel or broker data
 - rotate credentials if they are ever accidentally published
-- keep private topology details in private deployment notes, not in public docs
+- keep private topology details in private deployment notes, not in shared docs

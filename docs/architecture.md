@@ -9,6 +9,49 @@ The system consists of one or more independent local Meshtastic meshes connected
 - A private MQTT broker provides inter-site backhaul.
 - Optional cloud services provide centralized logging, dashboards, backups, and management tooling.
 
+## Diagram
+
+```mermaid
+flowchart LR
+  subgraph SA[Site A]
+    AR[Field Radios<br/>arxx]
+    AS[Sensor Nodes<br/>asxx]
+    AGR[Gateway Radio<br/>agxx]
+    AGP[Gateway Pi<br/>logging queue policy]
+    AR <-- LoRa --> AGR
+    AS <-- LoRa --> AGR
+    AGR <-- USB Serial --> AGP
+  end
+
+  subgraph SB[Site B]
+    BR[Field Radios<br/>brxx]
+    BS[Sensor Nodes<br/>bsxx]
+    BGR[Gateway Radio<br/>bgxx]
+    BGP[Gateway Pi<br/>logging queue policy]
+    BR <-- LoRa --> BGR
+    BS <-- LoRa --> BGR
+    BGR <-- USB Serial --> BGP
+  end
+
+  subgraph SC[Cloud]
+    MQTT[Private MQTT Broker<br/>cgxx]
+    OBS[Optional Logging Dashboards Backups]
+  end
+
+  AGP <-- MQTT over Internet --> MQTT
+  BGP <-- MQTT over Internet --> MQTT
+  MQTT --- OBS
+```
+
+## Reference Hardware
+
+<p align="center">
+  <img src="assets/heltec-v3.png" width="48%" alt="Heltec WiFi LoRa 32 V3 product imagery" />
+  <img src="assets/raspberry-pi-4.png" width="48%" alt="Raspberry Pi 4 product imagery" />
+</p>
+
+The reference fixed-site gateway pairs a Raspberry Pi host with a Heltec ESP32 V3 radio. Meshtastic provides the RF mesh behavior while the Pi hosts queueing, logging, and bridge policy.
+
 ## Logical Flow
 
 1. A local node transmits over LoRa on the relevant site mesh.
@@ -81,7 +124,7 @@ Each fixed site contains these major elements:
 ## Security Model
 
 - Live credentials and keys are private deployment data.
-- Public repo content includes schemas, templates, and examples only.
+- Versioned content includes schemas, templates, and examples only.
 - Control traffic is subject to stricter policy than chat or telemetry traffic.
 - Cloud and site services use separate credentials and should support credential rotation.
 

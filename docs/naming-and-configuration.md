@@ -49,7 +49,7 @@ The device code should map into Meshtastic-facing metadata and inventory records
 - long operational name: a descriptive label such as `Site A Gateway North Barn`
 - inventory record: hardware type, antenna, install location, and owner
 
-The exact Meshtastic fields used for this mapping should be confirmed during implementation, but the 4-character code is the canonical identifier in this repository.
+The exact Meshtastic fields used for this mapping should be confirmed during implementation, but the 4-character code is the canonical fleet identifier in this design.
 
 ## Channel Assignment Model
 
@@ -66,9 +66,9 @@ Not every device joins every channel.
 
 Use one channel as the general-purpose default for field devices and install secondary channels only where required by function.
 
-## Public vs Private Configuration
+## Versioned vs Private Configuration
 
-Public repository content may include:
+Versioned content may include:
 
 - config schemas
 - sample YAML, JSON, or env files

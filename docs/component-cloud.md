@@ -47,7 +47,7 @@ For Phase 1, an external VPS is preferred because it avoids making Site A or Sit
 - use separate credentials for broker clients and operators
 - support credential rotation
 - restrict network exposure to required services only
-- do not commit real cloud hostnames, addresses, or credentials to the public repository
+- do not commit real cloud hostnames, addresses, or credentials to version control
 
 ## Naming Guidance
 

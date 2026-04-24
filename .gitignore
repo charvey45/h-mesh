@@ -12,5 +12,6 @@ logs/
 state/
 tmp/
 dist/
+.playwright-mcp/
 .DS_Store
 Thumbs.db

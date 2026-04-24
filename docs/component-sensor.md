@@ -49,4 +49,4 @@ If a sensor-adjacent device must actuate hardware, document it as a controlled a
 
 - locate antennas for reliable local coverage, not just device convenience
 - document power source, service interval, and physical mount in private deployment records
-- keep calibration and maintenance details out of the public repo if they expose site-sensitive information
+- keep calibration and maintenance details out of versioned docs if they expose site-sensitive information
