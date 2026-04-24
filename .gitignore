@@ -1,3 +1,4 @@
+.ai-todo
 config/private/
 secrets/
 *.env
