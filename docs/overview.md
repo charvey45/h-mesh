@@ -44,7 +44,7 @@ The solution combines four layers:
 
 ### Inter-Site Backbone
 
-- private MQTT transport
+- private [MQTT](https://mqtt.org/) transport for lightweight publish/subscribe message exchange between site gateways
 - optional cloud-hosted logging and observability
 
 ### Controlled Automation Boundary

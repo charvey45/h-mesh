@@ -34,7 +34,7 @@ The proposed solution combines:
 
 - one local [Meshtastic](https://meshtastic.org/) mesh per site
 - one Pi-assisted gateway per fixed site
-- a private MQTT backbone for inter-site transport
+- a private [MQTT](https://mqtt.org/) backbone for inter-site transport, where MQTT is a lightweight publish/subscribe messaging protocol commonly used in IoT systems
 - per-channel policy for `ops`, `sensor`, and `control` traffic
 - private deployment configuration separated from versioned examples and templates
 

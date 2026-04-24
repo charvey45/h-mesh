@@ -6,7 +6,7 @@ The system consists of one or more independent local [Meshtastic](https://meshta
 
 - Each physical site has local radios and sensors.
 - Each fixed site has one Raspberry Pi-assisted gateway pair composed of a Pi and a USB-connected Heltec ESP32 V3.
-- A private MQTT broker provides inter-site backhaul.
+- A private [MQTT](https://mqtt.org/) broker provides inter-site backhaul. MQTT is a lightweight publish/subscribe messaging protocol that fits low-bandwidth, distributed device communication.
 - Optional cloud services provide centralized logging, dashboards, backups, and management tooling.
 
 ## Diagram
