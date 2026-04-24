@@ -1,0 +1,16 @@
+config/private/
+secrets/
+*.env
+*.local
+*.key
+*.pem
+*.p12
+*.db
+*.sqlite
+*.sqlite3
+logs/
+state/
+tmp/
+dist/
+.DS_Store
+Thumbs.db

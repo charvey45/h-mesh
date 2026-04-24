@@ -1,0 +1,25 @@
+site_code: a
+gateway_id: ag01
+
+channels:
+  ops:
+    bridge_to_mqtt: true
+    allow_from_types: ["g", "r"]
+    queue_when_offline: true
+  sensor:
+    bridge_to_mqtt: true
+    allow_from_types: ["g", "s"]
+    queue_when_offline: true
+    rate_limit_per_minute: 60
+  control:
+    bridge_to_mqtt: true
+    allow_from_types: ["g"]
+    queue_when_offline: false
+    require_allowlist: true
+
+control:
+  enabled: true
+  approved_senders: ["ag01", "bg02"]
+  approved_targets: ["as20"]
+  max_runtime_seconds: 30
+  fail_safe_state: open

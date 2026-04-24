@@ -1,0 +1,15 @@
+primary_channel: ops
+
+channels:
+  - name: ops
+    purpose: human communication
+    member_types: ["g", "r"]
+    bridge_to_mqtt: true
+  - name: sensor
+    purpose: telemetry and state reporting
+    member_types: ["g", "s"]
+    bridge_to_mqtt: true
+  - name: control
+    purpose: supervised automation commands
+    member_types: ["g", "s"]
+    bridge_to_mqtt: true
