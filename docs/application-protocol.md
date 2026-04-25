@@ -242,6 +242,22 @@ If `expires_at` is present and in the past, the event:
 
 - requires `target`
 - should populate `correlation_id` for conversation tracking
+- must not also populate a site-wide `target_scope`
+- represents targeted routing and presentation, not a guarantee of end-to-end privacy
+
+## Direct Ops Semantics
+
+Phase 1 direct operator dialogs are gateway-normalized `ops_direct` events with an explicit `target`.
+
+Rules:
+
+- the source gateway must preserve the original sender and target
+- the destination gateway must verify that the target belongs to its site or is locally reachable
+- gateways must not silently convert `ops_direct` into `ops_broadcast`
+- gateways may store direct dialog events in `message_events` for troubleshooting, replay, and audit
+- user-facing docs and clients must not imply end-to-end privacy unless a later implementation provides and validates it
+
+This keeps direct dialogs from creating unnecessary shared-channel noise while avoiding a false privacy claim.
 
 ### `position_report`
 
