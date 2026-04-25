@@ -490,6 +490,8 @@ Historical movement queries should be able to answer questions such as:
 
 `bs01` measures basement humidity, temperature, and sump pit water level at Site B. The readings must be stored for later analysis and evaluated against alert thresholds.
 
+Detailed telemetry storage, threshold evaluation, alert lifecycle, and stale-data requirements are refined in [Telemetry And Alerting](telemetry-alerting.md).
+
 ### Realistic Data Flow
 
 #### Step 1: Sensor Capture At Site B
@@ -685,7 +687,7 @@ The alert can then be:
 
 - should direct operator dialogs stay entirely in native Meshtastic semantics or be normalized into a gateway conversation model
 - should position history live on the gateway, in a central database, or in both
-- what retention periods are required for movement history and sensor history
+- what final production retention periods are required for movement history and sensor history
 - should alert thresholds be managed centrally or per site
 - how should invalid or legacy device identifiers such as `rg04` be normalized before implementation
 - should human-readable alerts also produce machine-readable incident records
