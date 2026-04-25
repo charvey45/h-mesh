@@ -20,6 +20,7 @@ Examples:
 - private inter-site message transport
 - isolated from public Meshtastic infrastructure
 - reachable from each participating site gateway
+- may be exposed over IPv4, IPv6, or dual-stack networking because gateway connectivity is handled by the Raspberry Pi host rather than the Meshtastic radio
 
 ### Observability
 
@@ -37,10 +38,15 @@ Examples:
 ## Placement Options
 
 - small VPS with a public IP
+- small VPS with public IPv4, IPv6, or dual-stack access
 - hosted service with restricted access
 - self-hosted server at a trusted site if its uptime is sufficient for the deployment
 
 For Phase 1, an external VPS is preferred because it avoids making Site A or Site B the single point of failure for all inter-site traffic.
+
+## Addressing Note
+
+If the MQTT broker is hosted on AWS and exposed over IPv6, the design still works normally. The important requirement is that each site gateway Pi can establish IP connectivity to the broker. Meshtastic remains the local RF transport, while IPv6 applies only to the internet-facing broker connection.
 
 ## Security Expectations
 

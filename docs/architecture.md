@@ -93,6 +93,13 @@ Each fixed site contains these major elements:
 - Moves selected messages between sites
 - Decouples site availability from cloud availability
 - Allows future addition of cloud-side consumers, dashboards, and audit services
+- May be hosted on IPv4, IPv6, or dual-stack infrastructure because the Pi-to-broker path is normal IP networking
+
+### IPv6 Boundary
+
+- IPv6 is relevant on the Raspberry Pi to broker path, not on the Meshtastic RF mesh itself
+- A broker hosted on AWS with IPv6 reachability is compatible with this design as long as the site gateway Pi has working IPv6 internet access
+- Broker address family is an infrastructure choice and does not change the Meshtastic packet format or radio behavior
 
 ## Channel Separation
 
@@ -120,6 +127,34 @@ Each fixed site contains these major elements:
 - Inter-site forwarding pauses when the broker or WAN path is unavailable.
 - Gateway Pi hosts persist queued inter-site traffic for later replay.
 - Queueing policy should prefer bounded retention over unbounded growth.
+
+## Gateway Degraded Modes
+
+The gateway host must distinguish between broker availability and radio availability.
+
+### Broker Available, Radio Available
+
+- normal publish and subscribe behavior
+- inbound MQTT traffic may be injected into the local mesh
+
+### Broker Available, Radio Missing Or Unhealthy
+
+- outbound locally originated inter-site traffic may still be logged and optionally published if policy allows
+- inbound MQTT traffic intended for local RF reinjection must not be silently consumed and discarded
+- the preferred default behavior is to pause or unsubscribe from site-bound MQTT relay topics until the USB radio is restored
+- local queueing for inbound MQTT traffic should only be enabled if the gateway service implements bounded durable storage, replay rules, expiry, and duplicate suppression
+
+This keeps the broker from appearing healthy while the site is actually unable to radiate traffic.
+
+## Lab Validation
+
+When multiple logical sites are tested in close physical proximity, RF isolation must be treated as part of the design.
+
+- Site A and Site B should not be assumed separate just because their gateways use different MQTT topics
+- if nearby radios can hear each other over LoRa, accidental local coupling can occur and invalidate site-to-site test results
+- lab testing should use separate channel credentials for each logical site and should prefer only one active gateway radio at a time during relay validation
+- a practical bench method is to leave Site A's radio attached and Site B's gateway host online without a radio, then swap the attached radio to validate queued or broker-mediated relay behavior without local RF crossover
+- successful relay testing means cross-site transfer stops when MQTT is disabled and does not depend on direct local RF reachability between the two logical sites
 
 ## Security Model
 
