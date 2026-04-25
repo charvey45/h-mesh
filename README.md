@@ -43,6 +43,7 @@ The proposed solution combines:
 - [Overview](docs/overview.md)
 - [Architecture](docs/architecture.md)
 - [Gateway Service Design](docs/gateway-service-design.md)
+- [Application Protocol](docs\application-protocol.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
