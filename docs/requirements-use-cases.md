@@ -10,7 +10,7 @@ The goal is not to lock in a final protocol. The goal is to model realistic end-
 
 - Device codes are shown in lowercase to match the naming standard.
 - Human-written examples may refer to uppercase forms such as `AR01`; those map to `ar01` in structured examples.
-- One requested node id, `RG04`, does not match the current `[site][type][hex][hex]` naming rule because `r` is not a defined site code. It is preserved here as `rg04` as a placeholder that must be resolved before implementation.
+- The original prompt included `RG04`; that value does not match the `[site][type][hex][hex]` naming rule because `r` is not a defined site code. This document normalizes that example to `br04`, a Site B radio.
 
 ## Architectural Assumptions
 
@@ -270,6 +270,8 @@ Message:
 
 After the check-in, `ar01` and `br02` continue a direct conversation that should not clutter the shared broadcast path.
 
+For Phase 1, "direct" means the gateway preserves a single explicit `target` and does not intentionally rebroadcast the message to a site-wide scope. It does not mean the message is invisible to every radio transport participant, gateway log, broker administrator, or storage operator.
+
 Example dialog:
 
 - `ar01` to `br02`: "How high is the water now?"
@@ -336,13 +338,18 @@ The receiving gateway:
 - does not reframe the message as a broadcast
 - logs the conversation metadata
 
+#### Step 4: Privacy And Logging Treatment
+
+The gateway may store the direct dialog in `message_events` for audit, replay, and troubleshooting. Any user-facing client should avoid presenting this as end-to-end private unless the implementation later proves a stronger encryption and logging model.
+
 ### Deep Analysis
 
 #### Requirements
 
 - support direct addressing across sites
 - maintain `conversation_id` or equivalent correlation
-- preserve privacy of targeted messages relative to shared broadcasts
+- avoid shared-channel noise by preserving targeted message semantics
+- make privacy and logging behavior explicit to operators
 - allow a dialog to continue even if started from a broadcast exchange
 
 #### Concerns
@@ -353,7 +360,6 @@ The receiving gateway:
 
 #### Missed Requirements
 
-- whether dialogs require end-to-end encryption distinct from shared-channel traffic
 - whether conversation history should be queryable in the same way as broadcasts
 - rules for conversation expiry and archival
 
@@ -361,7 +367,7 @@ The receiving gateway:
 
 ### Narrative
 
-`br03` and `rg04` report their locations every few minutes according to Meshtastic position settings. Operators at Site A want to view current positions on a node map. Historical positions should also be stored for later movement analysis.
+`br03` and `br04` report their locations every few minutes according to Meshtastic position settings. Operators at Site A want to view current positions on a node map. Historical positions should also be stored for later movement analysis.
 
 ### Realistic Data Flow
 
@@ -393,14 +399,14 @@ Candidate position event for `br03`:
 }
 ```
 
-Candidate position event for `rg04`:
+Candidate position event for `br04`:
 
 ```json
 {
   "schema_version": 1,
   "msg_type": "position_report",
   "msg_id": "pos-20260424-0102",
-  "source": "rg04",
+  "source": "br04",
   "source_site": "b",
   "channel": "sensor",
   "observed_by": "bg02",
@@ -435,12 +441,12 @@ Candidate position event for `rg04`:
 
 #### Step 4: Operator Query
 
-An operator at Site A opens a map view and sees the current positions of `br03` and `rg04`.
+An operator at Site A opens a map view and sees the current positions of `br03` and `br04`.
 
 Historical movement queries should be able to answer questions such as:
 
 - where was `br03` between `14:00` and `15:00`
-- how often did `rg04` move between zones
+- how often did `br04` move between zones
 - what was the last observed location before loss of connectivity
 
 ### Candidate Position History Record
@@ -482,7 +488,7 @@ Historical movement queries should be able to answer questions such as:
 - retention period and down-sampling strategy for movement history
 - privacy policy for long-term location retention
 - handling of clock drift between nodes and gateways
-- resolution of the invalid `rg04` identifier before schema hardening
+- governance for rejecting identifiers that do not match the fleet naming standard
 
 ## Use Case 5: Basement Environmental And Water Monitoring
 
@@ -647,7 +653,7 @@ The alert can then be:
 - a canonical event schema for all machine-processed traffic
 - explicit expiry and retry semantics for each message class
 - retention policies for chat, positions, telemetry, and alerts
-- privacy expectations for operator conversations and historical location data
+- explicit privacy and logging expectations for operator conversations and historical location data
 - a formal topic taxonomy for MQTT
 - a decision on whether source gateways or a central service own cross-site fan-out
 
@@ -685,9 +691,9 @@ The alert can then be:
 
 ## Open Questions
 
-- should direct operator dialogs stay entirely in native Meshtastic semantics or be normalized into a gateway conversation model
+- how much conversation history should be retained for targeted operator dialogs
 - should position history live on the gateway, in a central database, or in both
 - what final production retention periods are required for movement history and sensor history
 - should alert thresholds be managed centrally or per site
-- how should invalid or legacy device identifiers such as `rg04` be normalized before implementation
+- should invalid or legacy device identifiers be rejected at ingest or mapped through an inventory alias table
 - should human-readable alerts also produce machine-readable incident records
