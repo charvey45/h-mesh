@@ -46,6 +46,7 @@ The proposed solution combines:
 - [Transport Constraints](docs/transport-constraints.md)
 - [Application Protocol](docs/application-protocol.md)
 - [Sensor And Control Schemas](docs/sensor-control-schemas.md)
+- [Payload Transfer Decision](docs/payload-transfer-decision.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
