@@ -57,3 +57,29 @@ The proposed solution combines:
 - [Sensor Components](docs/component-sensor.md)
 - [Cloud Components](docs/component-cloud.md)
 - [Private Configuration](docs/private-configuration.md)
+
+## Gateway Scaffold
+
+The repository now includes a Phase 1 Python gateway service scaffold under `src/h_mesh_gateway` plus a local Docker [MQTT](https://mqtt.org/) lab broker.
+
+Local lab broker:
+
+```powershell
+docker compose -f docker-compose.lab.yml up -d
+```
+
+Config validation:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway validate-config --env config/examples/site.lab.env.example --json
+```
+
+Skeleton startup:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway run-skeleton --env config/examples/site.lab.env.example --json
+```
+
+This scaffold does not yet implement live serial or broker I/O. It gives the project a concrete runtime layout, validated gateway identity loading, internal health-state handling, and a stable place to add SQLite, MQTT, and Meshtastic adapters next.
