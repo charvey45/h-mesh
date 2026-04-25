@@ -42,6 +42,7 @@ The proposed solution combines:
 
 - [Overview](docs/overview.md)
 - [Architecture](docs/architecture.md)
+- [Position Persistence](docs/position-persistence.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
