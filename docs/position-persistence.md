@@ -302,7 +302,7 @@ The design should not block later calculations such as:
 - whether the authoritative current-state store is local, central, or both
 - whether historical records remain only on gateways, only centrally, or replicated
 - whether privacy policy requires precision reduction after a retention threshold
-- how the invalid `rg04` identifier is normalized before production data exists
+- whether invalid identifiers are rejected immediately or mapped through an inventory alias table
 
 ## Exit Criteria For This Task
 

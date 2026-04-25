@@ -40,6 +40,9 @@ This means only one device in the fleet may use `01`, regardless of site or type
 - Keep the device code stable for the life of the device
 - Reflect the same code in labels, inventory, and documentation
 - Prefer the device code as the [Meshtastic](https://meshtastic.org/) operational name where supported
+- Reject new identifiers that do not match `[site][type][hex][hex]`
+
+Legacy or mistaken identifiers should be corrected before they enter schemas, dashboards, or tests. If a field deployment ever needs to preserve an old label, track it as an inventory alias instead of treating it as the canonical device code.
 
 ## Intended Config Mapping
 
