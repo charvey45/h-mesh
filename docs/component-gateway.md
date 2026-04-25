@@ -48,6 +48,35 @@ This document covers all `?gxx` devices, including:
 - optional local API or dashboard
 - optional relay/control adapter process
 
+## Radio Presence Handling
+
+The gateway service must treat the USB radio as a dependency with explicit health state, not as an assumption.
+
+### Expected States
+
+- radio present and healthy
+- radio missing
+- radio present but serial link unhealthy
+
+### Required Behavior
+
+- publish health state for the local gateway
+- stop RF reinjection attempts when the radio is unavailable
+- do not silently drain MQTT-delivered site traffic that cannot be transmitted locally
+- prefer pausing or unsubscribing from inbound site-bound MQTT topics while the radio is unavailable
+- only spool inbound MQTT traffic locally if the gateway implements bounded durable queueing with expiry and replay controls
+
+For initial lab work, pausing inbound consumption is the safer default than accepting MQTT traffic that cannot yet be radiated.
+
+## Colocated Site Testing
+
+If multiple logical sites are tested on the same bench or in nearby buildings, gateway design must account for unintended RF overlap.
+
+- different MQTT topics do not prevent nearby radios from hearing each other over LoRa
+- separate channel credentials should be used for colocated lab sites
+- relay-path validation should prefer one active site radio at a time
+- a gateway host without an attached radio is a valid test state and should remain observable without pretending that local retransmission is available
+
 ## Control Safety
 
 Gateway hosts may support automation workflows, but they must never forward arbitrary packets directly into high-current hardware actions.
