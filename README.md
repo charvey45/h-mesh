@@ -44,6 +44,7 @@ The proposed solution combines:
 - [Architecture](docs/architecture.md)
 - [Gateway Service Design](docs/gateway-service-design.md)
 - [Application Protocol](docs\application-protocol.md)
+- [Sensor And Control Schemas](docs/sensor-control-schemas.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
