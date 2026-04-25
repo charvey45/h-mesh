@@ -43,6 +43,7 @@ The proposed solution combines:
 - [Overview](docs/overview.md)
 - [Architecture](docs/architecture.md)
 - [Gateway Service Design](docs/gateway-service-design.md)
+- [Gateway Acceptance Test Plan](docs/gateway-acceptance-tests.md)
 - [Transport Constraints](docs/transport-constraints.md)
 - [Application Protocol](docs/application-protocol.md)
 - [Sensor And Control Schemas](docs/sensor-control-schemas.md)
