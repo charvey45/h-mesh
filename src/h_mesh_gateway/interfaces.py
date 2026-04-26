@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -32,7 +33,12 @@ class BrokerAdapter(Protocol):
     def publish(self, topic: str, payload_json: str) -> None:
         ...
 
-    def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
+    def receive_one(
+        self,
+        topic: str,
+        timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
+    ) -> BrokerMessage | None:
         ...
 
     def receive_many(
@@ -40,6 +46,7 @@ class BrokerAdapter(Protocol):
         topic: str,
         max_messages: int,
         timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
     ) -> list[BrokerMessage]:
         ...
 

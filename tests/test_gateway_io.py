@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from h_mesh_gateway.adapters import InMemoryBrokerAdapter, InMemoryRadioAdapter
+from h_mesh_gateway.cli import wait_for_paths
 from h_mesh_gateway.health import BrokerState, RadioState
 from h_mesh_gateway.config import load_runtime_config
 from h_mesh_gateway.service import GatewayService
@@ -90,6 +91,27 @@ class GatewayIoTests(unittest.TestCase):
         self.assertEqual(report["status"], "emitted")
         self.assertEqual(report["radio_state"], "healthy")
         self.assertEqual(radio.pop_emission()["msg_id"], "ops-test-0001")
+
+    def test_simulated_mqtt_to_radio_marks_ready_when_subscription_is_active(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir, site_code="b", gateway_id="bg02", radio_enabled=True)
+        config = load_runtime_config(env_path)
+        service = GatewayService(config)
+        broker = InMemoryBrokerAdapter()
+        radio = InMemoryRadioAdapter()
+        broker.publish("mesh/v1/site-a/ops/up", json.dumps(OPS_FIXTURE, sort_keys=True))
+        ready_markers: list[str] = []
+
+        report = service.simulate_mqtt_to_radio(
+            topic="mesh/v1/site-a/ops/up",
+            broker=broker,
+            radio=radio,
+            timeout_seconds=0.1,
+            on_broker_ready=lambda: ready_markers.append("subscribed"),
+        )
+
+        self.assertEqual(report["status"], "emitted")
+        self.assertEqual(ready_markers, ["subscribed"])
 
     def test_duplicate_mqtt_message_is_suppressed(self) -> None:
         temp_dir = Path(tempfile.mkdtemp())
@@ -195,3 +217,17 @@ class GatewayIoTests(unittest.TestCase):
         queue_depths = [json.loads(message.payload_json)["queue_depth"] for message in health_messages]
 
         self.assertEqual(queue_depths, [1, 0])
+
+    def test_wait_for_paths_returns_existing_ready_markers(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        ready_one = temp_dir / "bg02-ready.json"
+        ready_two = temp_dir / "ag01-health-watch-ready.json"
+        ready_one.write_text("{}", encoding="utf-8")
+        ready_two.write_text("{}", encoding="utf-8")
+
+        resolved = wait_for_paths([ready_one, ready_two], timeout_seconds=0.1)
+
+        self.assertEqual(
+            resolved,
+            [str(ready_one), str(ready_two)],
+        )

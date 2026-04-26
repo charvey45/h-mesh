@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 import time
 from collections import deque
@@ -50,8 +51,18 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             raise RuntimeError(f"MQTT publish failed rc={result.rc}")
         self._state = BrokerState.CONNECTED
 
-    def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
-        messages = self.receive_many(topic, max_messages=1, timeout_seconds=timeout_seconds)
+    def receive_one(
+        self,
+        topic: str,
+        timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
+    ) -> BrokerMessage | None:
+        messages = self.receive_many(
+            topic,
+            max_messages=1,
+            timeout_seconds=timeout_seconds,
+            on_ready=on_ready,
+        )
         if not messages:
             return None
         return messages[0]
@@ -61,10 +72,12 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         topic: str,
         max_messages: int,
         timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
     ) -> list[BrokerMessage]:
         mqtt = self._load_mqtt()
         received: list[BrokerMessage] = []
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
+        ready_emitted = False
         if self.username:
             client.username_pw_set(self.username, self.password)
         if self.tls_enabled:
@@ -83,6 +96,17 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             connected_client.subscribe(topic, qos=1)
             self._state = BrokerState.CONNECTED
 
+        def on_subscribe(_client, _userdata, _mid, reason_codes, _properties=None) -> None:
+            nonlocal ready_emitted
+            if ready_emitted:
+                return
+            if reason_codes and any(int(code) >= 128 for code in reason_codes):
+                self._state = BrokerState.DISCONNECTED
+                return
+            ready_emitted = True
+            if on_ready is not None:
+                on_ready()
+
         def on_message(_client, _userdata, message) -> None:
             received.append(
                 BrokerMessage(
@@ -92,6 +116,7 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             )
 
         client.on_connect = on_connect
+        client.on_subscribe = on_subscribe
         client.on_message = on_message
         client.connect(self.host, self.port, keepalive=30)
         client.loop_start()
@@ -127,8 +152,18 @@ class InMemoryBrokerAdapter(BrokerAdapter):
     def publish(self, topic: str, payload_json: str) -> None:
         self.published_messages.append(BrokerMessage(topic=topic, payload_json=payload_json))
 
-    def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
-        messages = self.receive_many(topic, max_messages=1, timeout_seconds=timeout_seconds)
+    def receive_one(
+        self,
+        topic: str,
+        timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
+    ) -> BrokerMessage | None:
+        messages = self.receive_many(
+            topic,
+            max_messages=1,
+            timeout_seconds=timeout_seconds,
+            on_ready=on_ready,
+        )
         if not messages:
             return None
         return messages[0]
@@ -138,8 +173,11 @@ class InMemoryBrokerAdapter(BrokerAdapter):
         topic: str,
         max_messages: int,
         timeout_seconds: float,
+        on_ready: Callable[[], None] | None = None,
     ) -> list[BrokerMessage]:
         del timeout_seconds
+        if on_ready is not None:
+            on_ready()
         matches: list[BrokerMessage] = []
         kept: list[BrokerMessage] = []
         for message in self.published_messages:

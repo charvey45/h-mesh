@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 import json
 from datetime import timedelta
@@ -305,6 +306,7 @@ class GatewayService:
         broker: BrokerAdapter,
         radio: RadioAdapter,
         timeout_seconds: float = 10.0,
+        on_broker_ready: Callable[[], None] | None = None,
     ) -> dict[str, object]:
         tables = self._initialize_storage()
         if radio.current_state() != RadioState.HEALTHY:
@@ -328,7 +330,7 @@ class GatewayService:
                 "health_topic": health_report["topic"],
                 "storage_tables": tables,
             }
-        message = broker.receive_one(topic, timeout_seconds)
+        message = broker.receive_one(topic, timeout_seconds, on_ready=on_broker_ready)
         if message is None:
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
