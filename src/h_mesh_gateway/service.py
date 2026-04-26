@@ -82,7 +82,7 @@ class GatewayService:
         self._initialize_storage()
         self.health = self.health.with_states(
             process_state=ProcessState.READY,
-            broker_state=broker_state or broker.current_state(),
+            broker_state=broker_state or BrokerState.CONNECTED,
             radio_state=radio_state or self._determine_radio_state(),
             queue_depth=self.storage.queue_depth() if queue_depth is None else queue_depth,
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -157,8 +158,16 @@ class GatewayStorage:
         connection.row_factory = sqlite3.Row
         return connection
 
+    @contextmanager
+    def _connection(self):
+        connection = self._connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
     def initialize(self) -> list[str]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             for statement in SCHEMA_STATEMENTS:
                 connection.execute(statement)
             connection.commit()
@@ -174,7 +183,7 @@ class GatewayStorage:
         return [str(row["name"]) for row in rows]
 
     def record_message_event(self, record: MessageEventRecord) -> int:
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO message_events (
@@ -214,7 +223,7 @@ class GatewayStorage:
 
     def record_gateway_observation(self, record: GatewayObservationRecord) -> int:
         normalized = record.normalize()
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO gateway_observations (
@@ -238,7 +247,7 @@ class GatewayStorage:
 
     def enqueue_outbound_event(self, record: OutboundQueueRecord) -> int:
         normalized = record.normalize()
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO outbound_queue (
@@ -263,7 +272,7 @@ class GatewayStorage:
             return int(cursor.lastrowid)
 
     def queue_depth(self) -> int:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT COUNT(*) AS queue_depth
@@ -275,7 +284,7 @@ class GatewayStorage:
 
     def remember_seen_message(self, record: DedupeRecord) -> None:
         normalized = record.normalize()
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 INSERT INTO dedupe_cache (
@@ -298,7 +307,7 @@ class GatewayStorage:
             connection.commit()
 
     def has_seen_message(self, msg_id: str) -> bool:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT expires_at
@@ -323,7 +332,7 @@ class GatewayStorage:
         return True
 
     def list_pending_outbound_events(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 """
                 SELECT
@@ -352,7 +361,7 @@ class GatewayStorage:
         status: str = "retrying",
         attempted_at: str | None = None,
     ) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 UPDATE outbound_queue
@@ -366,7 +375,7 @@ class GatewayStorage:
             connection.commit()
 
     def mark_outbound_published(self, msg_id: str, *, published_at: str | None = None) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 UPDATE outbound_queue
@@ -383,7 +392,7 @@ class GatewayStorage:
             connection.commit()
 
     def mark_outbound_expired(self, msg_id: str) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 UPDATE outbound_queue

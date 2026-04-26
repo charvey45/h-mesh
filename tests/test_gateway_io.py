@@ -173,6 +173,7 @@ class GatewayIoTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "published")
         self.assertEqual(report["topic"], "mesh/v1/site-a/gateway/ag01/state")
+        self.assertEqual(report["health"]["broker_state"], "connected")
         observed = broker.receive_many("mesh/v1/site-a/gateway/ag01/state", max_messages=1, timeout_seconds=0.1)
         self.assertEqual(len(observed), 1)
         self.assertEqual(json.loads(observed[0].payload_json)["gateway_id"], "ag01")
