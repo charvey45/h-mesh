@@ -1,0 +1,46 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: h-mesh-pi-mqtt-pi-broker
+    restart: "no"
+    ports:
+      - "1884:1883"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  bg02:
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    container_name: h-mesh-bg02-sim
+    depends_on:
+      - mqtt-broker
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - simulate-mqtt-to-radio
+      - --env
+      - /app/config/examples/bg02.pi-sim.env.example
+      - --topic
+      - mesh/v1/site-a/ops/up
+      - --radio-output
+      - /tmp/bg02-radio-out.json
+      - --timeout-seconds
+      - "20"
+      - --json
+    restart: "no"
+
+  ag01:
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    container_name: h-mesh-ag01-sim
+    depends_on:
+      - mqtt-broker
+      - bg02
+    command:
+      - /bin/sh
+      - -lc
+      - sleep 3 && python -m h_mesh_gateway simulate-rf-to-mqtt --env /app/config/examples/ag01.pi-sim.env.example --payload-file /app/docker/integration/fixtures/ops-broadcast.json --json
+    restart: "no"

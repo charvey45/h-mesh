@@ -5,7 +5,9 @@ import json
 import logging
 from pathlib import Path
 
+from h_mesh_gateway.adapters import FileRadioAdapter, PahoMqttBrokerAdapter
 from h_mesh_gateway.config import GatewayRuntimeConfig, load_runtime_config
+from h_mesh_gateway.health import RadioState
 from h_mesh_gateway.service import GatewayService
 from h_mesh_gateway.storage import GatewayStorage
 
@@ -47,6 +49,45 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the initialized schema report as JSON.",
     )
+
+    simulate_rf_parser = subparsers.add_parser(
+        "simulate-rf-to-mqtt",
+        help="Read a fixture as simulated RF input and publish it through the gateway MQTT adapter.",
+    )
+    simulate_rf_parser.add_argument("--env", required=True, help="Path to the env file.")
+    simulate_rf_parser.add_argument(
+        "--payload-file",
+        required=True,
+        help="Path to the JSON fixture that represents a radio-observed message.",
+    )
+    simulate_rf_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the publish report as JSON.",
+    )
+
+    simulate_mqtt_parser = subparsers.add_parser(
+        "simulate-mqtt-to-radio",
+        help="Consume one MQTT message and emit it through the simulated radio adapter.",
+    )
+    simulate_mqtt_parser.add_argument("--env", required=True, help="Path to the env file.")
+    simulate_mqtt_parser.add_argument("--topic", required=True, help="MQTT topic to consume.")
+    simulate_mqtt_parser.add_argument(
+        "--radio-output",
+        required=True,
+        help="Path where the simulated radio emission JSON should be written.",
+    )
+    simulate_mqtt_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=20.0,
+        help="Maximum time to wait for one MQTT message.",
+    )
+    simulate_mqtt_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the emit report as JSON.",
+    )
     return parser
 
 
@@ -64,6 +105,17 @@ def render_payload(payload: dict[str, object], as_json: bool) -> None:
 
     for key, value in payload.items():
         print(f"{key}: {value}")
+
+
+def build_broker_adapter(config: GatewayRuntimeConfig, *, client_suffix: str) -> PahoMqttBrokerAdapter:
+    return PahoMqttBrokerAdapter(
+        host=config.mqtt.host,
+        port=config.mqtt.port,
+        client_id=f"{config.gateway_id}-{client_suffix}",
+        username=config.mqtt.username,
+        password=config.mqtt.password,
+        tls_enabled=config.mqtt.tls_enabled,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,6 +138,32 @@ def main(argv: list[str] | None = None) -> int:
             },
             args.json,
         )
+        return 0
+
+    if args.command == "simulate-rf-to-mqtt":
+        configure_logging(config)
+        service = GatewayService(config)
+        payload = json.loads(Path(args.payload_file).read_text(encoding="utf-8"))
+        report = service.simulate_rf_to_mqtt(
+            payload,
+            broker=build_broker_adapter(config, client_suffix="rf-publisher"),
+        )
+        render_payload(report, args.json)
+        return 0
+
+    if args.command == "simulate-mqtt-to-radio":
+        configure_logging(config)
+        service = GatewayService(config)
+        report = service.simulate_mqtt_to_radio(
+            topic=args.topic,
+            broker=build_broker_adapter(config, client_suffix="mqtt-subscriber"),
+            radio=FileRadioAdapter(
+                output_path=Path(args.radio_output),
+                state=RadioState.HEALTHY if config.radio_enabled else RadioState.MISSING,
+            ),
+            timeout_seconds=args.timeout_seconds,
+        )
+        render_payload(report, args.json)
         return 0
 
     configure_logging(config)

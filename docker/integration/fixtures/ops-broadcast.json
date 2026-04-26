@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "msg_type": "ops_broadcast",
+  "msg_id": "ops-test-0001",
+  "source": "ar01",
+  "source_site": "a",
+  "target": null,
+  "target_scope": "site-b-ops",
+  "channel": "ops",
+  "observed_by": "ag01",
+  "captured_at": "2026-04-26T10:00:00+00:00",
+  "expires_at": "2030-04-26T10:15:00+00:00",
+  "correlation_id": null,
+  "priority": "normal",
+  "flags": [],
+  "payload": {
+    "text": "integration harness message"
+  }
+}

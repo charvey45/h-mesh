@@ -89,4 +89,41 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway init-db --env config/examples/site.lab.env.example --json
 ```
 
-This scaffold does not yet implement live serial or broker I/O. It now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, and it includes queue-state helpers for pending, retrying, published, and expired outbound events plus de-duplication tracking for replay-safe bridge behavior.
+Simulate RF input flowing to MQTT through the real gateway package:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway simulate-rf-to-mqtt --env config/examples/ag01.pi-sim.env.example --payload-file docker/integration/fixtures/ops-broadcast.json --json
+```
+
+Simulate MQTT delivery back out through a file-backed radio adapter:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway simulate-mqtt-to-radio --env config/examples/bg02.pi-sim.env.example --topic mesh/v1/site-a/ops/up --radio-output tmp/bg02-radio-out.json --json
+```
+
+This scaffold now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, adds queue-state helpers for replay-safe bridge behavior, and includes a real MQTT adapter seam plus simulated radio interfaces for early lab testing.
+
+## Docker Integration Harness
+
+The Docker harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml) now runs the actual gateway package on both endpoints:
+
+- `ag01` reads a fixture as simulated RF input and publishes it over [MQTT](https://mqtt.org/)
+- `bg02` subscribes to the topic and emits the received payload through a simulated radio output file
+- Mosquitto provides the broker in the middle
+
+Bring up the harness directly:
+
+```powershell
+docker compose -f docker-compose.pi-mqtt-pi.yml up --build --abort-on-container-exit --exit-code-from bg02
+```
+
+Run the gated Python integration test:
+
+```powershell
+$env:RUN_DOCKER_INTEGRATION = "1"
+python -m unittest tests.test_pi_mqtt_pi_docker
+```
+
+The Docker daemon must be running for this integration test. If Docker is installed but the daemon is unavailable, the test skips rather than failing the full local suite.
