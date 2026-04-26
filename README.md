@@ -51,6 +51,7 @@ The proposed solution combines:
 - [Position Persistence](docs/position-persistence.md)
 - [Telemetry And Alerting](docs/telemetry-alerting.md)
 - [Management Dashboard](docs/management-dashboard.md)
+- [Log Archival Requirements](docs/log-archival-requirements.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
@@ -145,6 +146,8 @@ The repository also includes a lightweight management dashboard that reads the s
 - queue depth totals and queue status counts
 - recent broker-path and radio-path failures
 - recent local gateway logs
+
+Future S3-based archival is defined separately so the local dashboard-first deployment can stay simple while longer-term retention moves to cloud storage later.
 
 Run it with Docker:
 

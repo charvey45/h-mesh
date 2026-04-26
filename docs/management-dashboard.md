@@ -88,3 +88,5 @@ Later enhancements can add:
 - S3 archival or shipping
 - time-windowed failure metrics
 - broker-native telemetry if a dedicated broker exporter is introduced
+
+The forward path for S3-based archival is defined in [Log Archival Requirements](log-archival-requirements.md).
