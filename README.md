@@ -50,6 +50,7 @@ The proposed solution combines:
 - [Payload Transfer Decision](docs/payload-transfer-decision.md)
 - [Position Persistence](docs/position-persistence.md)
 - [Telemetry And Alerting](docs/telemetry-alerting.md)
+- [Management Dashboard](docs/management-dashboard.md)
 - [Requirements Use Cases](docs/requirements-use-cases.md)
 - [Naming And Configuration](docs/naming-and-configuration.md)
 - [Gateway Components](docs/component-gateway.md)
@@ -135,3 +136,20 @@ python -m unittest tests.test_pi_mqtt_pi_docker
 ```
 
 The Docker daemon must be running for this integration test. If Docker is installed but the daemon is unavailable, the test skips rather than failing the full local suite.
+
+## Management Dashboard
+
+The repository also includes a lightweight management dashboard that reads the shared gateway state directory and shows:
+
+- latest gateway health
+- queue depth totals and queue status counts
+- recent broker-path and radio-path failures
+- recent local gateway logs
+
+Run it with Docker:
+
+```powershell
+docker compose -f docker-compose.management.yml up --build -d
+```
+
+Then open `http://localhost:8080`.

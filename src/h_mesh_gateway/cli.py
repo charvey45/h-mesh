@@ -7,6 +7,7 @@ from pathlib import Path
 
 from h_mesh_gateway.adapters import FileRadioAdapter, PahoMqttBrokerAdapter
 from h_mesh_gateway.config import GatewayRuntimeConfig, load_runtime_config
+from h_mesh_gateway.dashboard import run_dashboard_server
 from h_mesh_gateway.health import RadioState
 from h_mesh_gateway.service import GatewayService
 from h_mesh_gateway.storage import GatewayStorage
@@ -138,6 +139,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional file path written after the MQTT subscription is active.",
     )
 
+    dashboard_parser = subparsers.add_parser(
+        "run-dashboard",
+        help="Run the local management dashboard against a shared gateway state directory.",
+    )
+    dashboard_parser.add_argument(
+        "--state-dir",
+        required=True,
+        help="Directory containing one or more gateway SQLite files.",
+    )
+    dashboard_parser.add_argument(
+        "--log-dir",
+        help="Directory containing gateway log files. Defaults to the state directory.",
+    )
+    dashboard_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Listen address for the dashboard HTTP server.",
+    )
+    dashboard_parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Listen port for the dashboard HTTP server.",
+    )
+
     return parser
 
 
@@ -205,6 +231,15 @@ def build_broker_adapter(config: GatewayRuntimeConfig, *, client_suffix: str) ->
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "run-dashboard":
+        run_dashboard_server(
+            state_dir=Path(args.state_dir).resolve(),
+            log_dir=Path(args.log_dir).resolve() if args.log_dir else None,
+            host=args.host,
+            port=args.port,
+        )
+        return 0
 
     if args.command == "validate-config":
         config = load_runtime_config(Path(args.env))
