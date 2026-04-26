@@ -1,0 +1,40 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: h-mesh-pi-mqtt-pi-broker
+    restart: "no"
+    ports:
+      - "1884:1883"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  bg02:
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    container_name: h-mesh-bg02-sim
+    depends_on:
+      - mqtt-broker
+    environment:
+      BROKER_HOST: mqtt-broker
+      BROKER_PORT: 1883
+      ROLE: subscriber
+      TOPIC: mesh/v1/site-a/ops/up
+      TIMEOUT_SECONDS: 20
+    restart: "no"
+
+  ag01:
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    container_name: h-mesh-ag01-sim
+    depends_on:
+      - mqtt-broker
+      - bg02
+    environment:
+      BROKER_HOST: mqtt-broker
+      BROKER_PORT: 1883
+      ROLE: publisher
+      TOPIC: mesh/v1/site-a/ops/up
+      START_DELAY_SECONDS: 3
+    restart: "no"
