@@ -113,7 +113,10 @@ class ManagementRepository:
                 queue_status_totals[status] = queue_status_totals.get(status, 0) + count
 
             observation_counts = storage.count_gateway_observations_by_kind()
-            for kind, count in observation_counts.items():
+            for kind in FAILURE_OBSERVATION_KINDS:
+                count = observation_counts.get(kind)
+                if count is None:
+                    continue
                 failure_counts[kind] = failure_counts.get(kind, 0) + count
 
             health_history = list(reversed(storage.list_gateway_health_snapshots(limit=24)))

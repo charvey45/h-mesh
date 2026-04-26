@@ -38,6 +38,14 @@ class DashboardTests(unittest.TestCase):
                 observed_at="2026-04-26T18:45:00+00:00",
             )
         )
+        storage.record_gateway_observation(
+            GatewayObservationRecord(
+                gateway_id="ag01",
+                kind="service_initialized",
+                detail="startup",
+                observed_at="2026-04-26T18:44:00+00:00",
+            )
+        )
         storage.record_message_event(
             MessageEventRecord(
                 msg_id="sensor-as01-0001",
@@ -77,6 +85,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(snapshot["queue_depth_total"], 1)
         self.assertEqual(snapshot["queue_status_totals"]["pending"], 1)
         self.assertEqual(snapshot["failure_counts"]["publish_failed"], 1)
+        self.assertNotIn("service_initialized", snapshot["failure_counts"])
         self.assertEqual(snapshot["gateways"][0]["gateway_id"], "ag01")
         self.assertEqual(snapshot["recent_failures"][0]["kind"], "publish_failed")
         self.assertEqual(snapshot["recent_sensor_events"][0]["source"], "as01")
