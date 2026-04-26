@@ -88,6 +88,41 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the emit report as JSON.",
     )
+
+    publish_health_parser = subparsers.add_parser(
+        "publish-health",
+        help="Publish a gateway health snapshot on the documented gateway state topic.",
+    )
+    publish_health_parser.add_argument("--env", required=True, help="Path to the env file.")
+    publish_health_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the health publish report as JSON.",
+    )
+
+    observe_topic_parser = subparsers.add_parser(
+        "observe-topic",
+        help="Observe one or more MQTT messages on a topic and print them as JSON.",
+    )
+    observe_topic_parser.add_argument("--env", required=True, help="Path to the env file.")
+    observe_topic_parser.add_argument("--topic", required=True, help="MQTT topic filter to observe.")
+    observe_topic_parser.add_argument(
+        "--max-messages",
+        type=int,
+        default=1,
+        help="Maximum number of messages to capture before exiting.",
+    )
+    observe_topic_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=20.0,
+        help="Maximum time to wait for the requested messages.",
+    )
+    observe_topic_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the observed messages as JSON.",
+    )
     return parser
 
 
@@ -164,6 +199,38 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout_seconds,
         )
         render_payload(report, args.json)
+        return 0
+
+    if args.command == "publish-health":
+        configure_logging(config)
+        service = GatewayService(config)
+        report = service.publish_health_snapshot(
+            build_broker_adapter(config, client_suffix="health-publisher"),
+            radio_state=RadioState.HEALTHY if config.radio_enabled else RadioState.MISSING,
+        )
+        render_payload(report, args.json)
+        return 0
+
+    if args.command == "observe-topic":
+        configure_logging(config)
+        broker = build_broker_adapter(config, client_suffix="topic-observer")
+        messages = broker.receive_many(
+            args.topic,
+            max_messages=args.max_messages,
+            timeout_seconds=args.timeout_seconds,
+        )
+        payload = {
+            "topic": args.topic,
+            "message_count": len(messages),
+            "messages": [
+                {
+                    "topic": message.topic,
+                    "payload": json.loads(message.payload_json),
+                }
+                for message in messages
+            ],
+        }
+        render_payload(payload, args.json)
         return 0
 
     configure_logging(config)

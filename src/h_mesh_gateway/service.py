@@ -56,6 +56,12 @@ class GatewayService:
         channel = str(payload["channel"])
         return f"{self.config.mqtt.topic_prefix}/site-{source_site}/{channel}/up"
 
+    def _health_topic(self) -> str:
+        return (
+            f"{self.config.mqtt.topic_prefix}/site-{self.config.site_code}/gateway/"
+            f"{self.config.gateway_id}/state"
+        )
+
     def _resolve_expiry(self, payload: dict[str, object]) -> str:
         expires_at = payload.get("expires_at")
         if isinstance(expires_at, str) and expires_at:
@@ -64,6 +70,62 @@ class GatewayService:
         if isinstance(captured_at, str) and captured_at:
             return (parse_iso_timestamp(captured_at) + timedelta(days=1)).isoformat()
         return (parse_iso_timestamp(utc_now_iso()) + timedelta(days=1)).isoformat()
+
+    def publish_health_snapshot(
+        self,
+        broker: BrokerAdapter,
+        *,
+        broker_state: BrokerState | None = None,
+        radio_state: RadioState | None = None,
+        queue_depth: int | None = None,
+    ) -> dict[str, object]:
+        self._initialize_storage()
+        self.health = self.health.with_states(
+            process_state=ProcessState.READY,
+            broker_state=broker_state or BrokerState.CONNECTED,
+            radio_state=radio_state or self._determine_radio_state(),
+            queue_depth=self.storage.queue_depth() if queue_depth is None else queue_depth,
+        )
+        payload_json = json.dumps(self.health.as_dict(), sort_keys=True)
+        topic = self._health_topic()
+        broker.publish(topic, payload_json)
+        self.storage.record_gateway_observation(
+            GatewayObservationRecord(
+                gateway_id=self.config.gateway_id,
+                kind="gateway_state_published",
+                detail=f"Published health snapshot to {topic}",
+            )
+        )
+        return {
+            "status": "published",
+            "topic": topic,
+            "health": self.health.as_dict(),
+        }
+
+    def maybe_publish_health_snapshot(
+        self,
+        broker: BrokerAdapter,
+        *,
+        broker_state: BrokerState | None = None,
+        radio_state: RadioState | None = None,
+        queue_depth: int | None = None,
+    ) -> dict[str, object] | None:
+        try:
+            return self.publish_health_snapshot(
+                broker,
+                broker_state=broker_state,
+                radio_state=radio_state,
+                queue_depth=queue_depth,
+            )
+        except RuntimeError as exc:
+            self.storage.record_gateway_observation(
+                GatewayObservationRecord(
+                    gateway_id=self.config.gateway_id,
+                    kind="gateway_state_publish_failed",
+                    detail=f"Failed to publish health snapshot: {exc}",
+                )
+            )
+            return None
 
     def run_skeleton(self) -> dict[str, object]:
         tables = self._initialize_storage()
@@ -184,6 +246,12 @@ class GatewayService:
                 expires_at=self._resolve_expiry(payload),
             )
         )
+        pre_publish_health = self.maybe_publish_health_snapshot(
+            broker,
+            broker_state=BrokerState.CONNECTED,
+            radio_state=self._determine_radio_state(),
+            queue_depth=self.storage.queue_depth(),
+        )
         try:
             broker.publish(topic, payload_json)
         except RuntimeError as exc:
@@ -206,6 +274,12 @@ class GatewayService:
             }
 
         self.storage.mark_outbound_published(msg_id)
+        health_report = self.maybe_publish_health_snapshot(
+            broker,
+            broker_state=BrokerState.CONNECTED,
+            radio_state=self._determine_radio_state(),
+            queue_depth=self.storage.queue_depth(),
+        ) or {"topic": self._health_topic()}
         self.storage.record_gateway_observation(
             GatewayObservationRecord(
                 gateway_id=self.config.gateway_id,
@@ -220,6 +294,7 @@ class GatewayService:
             "topic": topic,
             "queue_depth": self.storage.queue_depth(),
             "broker_state": broker.current_state().value,
+            "health_topic": health_report["topic"],
             "storage_tables": tables,
         }
 
@@ -233,6 +308,12 @@ class GatewayService:
     ) -> dict[str, object]:
         tables = self._initialize_storage()
         if radio.current_state() != RadioState.HEALTHY:
+            health_report = self.maybe_publish_health_snapshot(
+                broker,
+                broker_state=broker.current_state(),
+                radio_state=radio.current_state(),
+                queue_depth=self.storage.queue_depth(),
+            ) or {"topic": self._health_topic()}
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
                     gateway_id=self.config.gateway_id,
@@ -244,6 +325,7 @@ class GatewayService:
                 "status": "radio_unavailable",
                 "topic": topic,
                 "radio_state": radio.current_state().value,
+                "health_topic": health_report["topic"],
                 "storage_tables": tables,
             }
         message = broker.receive_one(topic, timeout_seconds)
@@ -309,6 +391,12 @@ class GatewayService:
                 expires_at=self._resolve_expiry(payload),
             )
         )
+        health_report = self.maybe_publish_health_snapshot(
+            broker,
+            broker_state=BrokerState.CONNECTED,
+            radio_state=radio.current_state(),
+            queue_depth=self.storage.queue_depth(),
+        ) or {"topic": self._health_topic()}
         self.storage.record_gateway_observation(
             GatewayObservationRecord(
                 gateway_id=self.config.gateway_id,
@@ -323,5 +411,6 @@ class GatewayService:
             "topic": topic,
             "radio_state": radio.current_state().value,
             "radio_output_path": str(emission.path),
+            "health_topic": health_report["topic"],
             "storage_tables": tables,
         }

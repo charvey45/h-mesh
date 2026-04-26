@@ -51,8 +51,19 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         self._state = BrokerState.CONNECTED
 
     def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
+        messages = self.receive_many(topic, max_messages=1, timeout_seconds=timeout_seconds)
+        if not messages:
+            return None
+        return messages[0]
+
+    def receive_many(
+        self,
+        topic: str,
+        max_messages: int,
+        timeout_seconds: float,
+    ) -> list[BrokerMessage]:
         mqtt = self._load_mqtt()
-        received: dict[str, str] = {}
+        received: list[BrokerMessage] = []
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
         if self.username:
             client.username_pw_set(self.username, self.password)
@@ -73,8 +84,12 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             self._state = BrokerState.CONNECTED
 
         def on_message(_client, _userdata, message) -> None:
-            received["topic"] = str(message.topic)
-            received["payload_json"] = message.payload.decode("utf-8")
+            received.append(
+                BrokerMessage(
+                    topic=str(message.topic),
+                    payload_json=message.payload.decode("utf-8"),
+                )
+            )
 
         client.on_connect = on_connect
         client.on_message = on_message
@@ -82,17 +97,12 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         client.loop_start()
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
-            if received:
+            if len(received) >= max_messages:
                 break
             time.sleep(0.1)
         client.loop_stop()
         client.disconnect()
-        if not received:
-            return None
-        return BrokerMessage(
-            topic=received["topic"],
-            payload_json=received["payload_json"],
-        )
+        return received
 
     @staticmethod
     def _load_mqtt():
@@ -118,11 +128,27 @@ class InMemoryBrokerAdapter(BrokerAdapter):
         self.published_messages.append(BrokerMessage(topic=topic, payload_json=payload_json))
 
     def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
+        messages = self.receive_many(topic, max_messages=1, timeout_seconds=timeout_seconds)
+        if not messages:
+            return None
+        return messages[0]
+
+    def receive_many(
+        self,
+        topic: str,
+        max_messages: int,
+        timeout_seconds: float,
+    ) -> list[BrokerMessage]:
         del timeout_seconds
-        for index, message in enumerate(self.published_messages):
-            if message.topic == topic:
-                return self.published_messages.pop(index)
-        return None
+        matches: list[BrokerMessage] = []
+        kept: list[BrokerMessage] = []
+        for message in self.published_messages:
+            if message.topic == topic and len(matches) < max_messages:
+                matches.append(message)
+            else:
+                kept.append(message)
+        self.published_messages = kept
+        return matches
 
 
 @dataclass(slots=True)

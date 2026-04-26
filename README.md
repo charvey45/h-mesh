@@ -103,14 +103,22 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway simulate-mqtt-to-radio --env config/examples/bg02.pi-sim.env.example --topic mesh/v1/site-a/ops/up --radio-output tmp/bg02-radio-out.json --json
 ```
 
-This scaffold now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, adds queue-state helpers for replay-safe bridge behavior, and includes a real MQTT adapter seam plus simulated radio interfaces for early lab testing.
+Publish a health snapshot on the documented gateway state topic:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway publish-health --env config/examples/ag01.pi-sim.env.example --json
+```
+
+This scaffold now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, adds queue-state helpers for replay-safe bridge behavior, includes a real MQTT adapter seam plus simulated radio interfaces for early lab testing, and publishes `gateway_state` snapshots on the documented MQTT topic layout.
 
 ## Docker Integration Harness
 
-The Docker harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml) now runs the actual gateway package on both endpoints:
+The Docker harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml) now runs the actual gateway package on both endpoints and includes a health-topic observer:
 
 - `ag01` reads a fixture as simulated RF input and publishes it over [MQTT](https://mqtt.org/)
 - `bg02` subscribes to the topic and emits the received payload through a simulated radio output file
+- `ag01-health-watch` observes the `gateway_state` topic so the harness can assert health transitions on the broker
 - Mosquitto provides the broker in the middle
 
 Bring up the harness directly:

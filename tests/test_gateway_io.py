@@ -64,8 +64,12 @@ class GatewayIoTests(unittest.TestCase):
         self.assertEqual(report["status"], "published")
         self.assertEqual(report["topic"], "mesh/v1/site-a/ops/up")
         self.assertEqual(report["queue_depth"], 0)
-        self.assertEqual(len(broker.published_messages), 1)
-        self.assertEqual(json.loads(broker.published_messages[0].payload_json)["msg_id"], "ops-test-0001")
+        self.assertEqual(len(broker.published_messages), 3)
+        ops_messages = [
+            message for message in broker.published_messages if message.topic == "mesh/v1/site-a/ops/up"
+        ]
+        self.assertEqual(len(ops_messages), 1)
+        self.assertEqual(json.loads(ops_messages[0].payload_json)["msg_id"], "ops-test-0001")
 
     def test_simulated_mqtt_to_radio_emits_fixture_once(self) -> None:
         temp_dir = Path(tempfile.mkdtemp())
@@ -157,3 +161,37 @@ class GatewayIoTests(unittest.TestCase):
         self.assertEqual(report["status"], "radio_unavailable")
         self.assertEqual(report["radio_state"], "missing")
         self.assertIsNotNone(broker.receive_one("mesh/v1/site-a/ops/up", 0.1))
+
+    def test_health_snapshot_publishes_on_documented_gateway_topic(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir, site_code="a", gateway_id="ag01", radio_enabled=True)
+        config = load_runtime_config(env_path)
+        service = GatewayService(config)
+        broker = InMemoryBrokerAdapter()
+
+        report = service.publish_health_snapshot(broker)
+
+        self.assertEqual(report["status"], "published")
+        self.assertEqual(report["topic"], "mesh/v1/site-a/gateway/ag01/state")
+        self.assertEqual(report["health"]["broker_state"], "connected")
+        observed = broker.receive_many("mesh/v1/site-a/gateway/ag01/state", max_messages=1, timeout_seconds=0.1)
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(json.loads(observed[0].payload_json)["gateway_id"], "ag01")
+
+    def test_rf_to_mqtt_publishes_health_transition_around_queue_drain(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir, site_code="a", gateway_id="ag01", radio_enabled=True)
+        config = load_runtime_config(env_path)
+        service = GatewayService(config)
+        broker = InMemoryBrokerAdapter()
+
+        service.simulate_rf_to_mqtt(OPS_FIXTURE, broker=broker)
+
+        health_messages = broker.receive_many(
+            "mesh/v1/site-a/gateway/ag01/state",
+            max_messages=2,
+            timeout_seconds=0.1,
+        )
+        queue_depths = [json.loads(message.payload_json)["queue_depth"] for message in health_messages]
+
+        self.assertEqual(queue_depths, [1, 0])
