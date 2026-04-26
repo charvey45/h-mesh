@@ -82,22 +82,42 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway run-skeleton --env config/examples/site.lab.env.example --json
 ```
 
-This scaffold does not yet implement live serial or broker I/O. It gives the project a concrete runtime layout, validated gateway identity loading, internal health-state handling, and a stable place to add SQLite, MQTT, and Meshtastic adapters next.
+Initialize the SQLite schema explicitly:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway init-db --env config/examples/site.lab.env.example --json
+```
+
+Simulate RF input flowing to MQTT through the real gateway package:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway simulate-rf-to-mqtt --env config/examples/ag01.pi-sim.env.example --payload-file docker/integration/fixtures/ops-broadcast.json --json
+```
+
+Simulate MQTT delivery back out through a file-backed radio adapter:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway simulate-mqtt-to-radio --env config/examples/bg02.pi-sim.env.example --topic mesh/v1/site-a/ops/up --radio-output tmp/bg02-radio-out.json --json
+```
+
+This scaffold now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, adds queue-state helpers for replay-safe bridge behavior, and includes a real MQTT adapter seam plus simulated radio interfaces for early lab testing.
 
 ## Docker Integration Harness
 
-The repository also includes a Docker-based `pi -> mqtt -> pi` harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml). It starts:
+The Docker harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml) now runs the actual gateway package on both endpoints:
 
-- a Mosquitto broker
-- an `ag01` publisher container
-- a `bg02` subscriber container
+- `ag01` reads a fixture as simulated RF input and publishes it over [MQTT](https://mqtt.org/)
+- `bg02` subscribes to the topic and emits the received payload through a simulated radio output file
+- Mosquitto provides the broker in the middle
 
 Bring up the harness directly:
 
 ```powershell
 docker compose -f docker-compose.pi-mqtt-pi.yml up --build --abort-on-container-exit --exit-code-from bg02
 ```
-
 Run the gated Python integration test:
 
 ```powershell
@@ -106,5 +126,3 @@ python -m unittest tests.test_pi_mqtt_pi_docker
 ```
 
 The Docker daemon must be running for this integration test. If Docker is installed but the daemon is unavailable, the test skips rather than failing the full local suite.
-
-This harness is intentionally narrow. It proves the Dockerized `pi -> mqtt -> pi` message path before the real gateway MQTT adapter and radio simulator are wired into the service runtime.

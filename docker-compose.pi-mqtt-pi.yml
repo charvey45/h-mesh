@@ -15,12 +15,20 @@ services:
     container_name: h-mesh-bg02-sim
     depends_on:
       - mqtt-broker
-    environment:
-      BROKER_HOST: mqtt-broker
-      BROKER_PORT: 1883
-      ROLE: subscriber
-      TOPIC: mesh/v1/site-a/ops/up
-      TIMEOUT_SECONDS: 20
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - simulate-mqtt-to-radio
+      - --env
+      - /app/config/examples/bg02.pi-sim.env.example
+      - --topic
+      - mesh/v1/site-a/ops/up
+      - --radio-output
+      - /tmp/bg02-radio-out.json
+      - --timeout-seconds
+      - "20"
+      - --json
     restart: "no"
 
   ag01:
@@ -31,10 +39,8 @@ services:
     depends_on:
       - mqtt-broker
       - bg02
-    environment:
-      BROKER_HOST: mqtt-broker
-      BROKER_PORT: 1883
-      ROLE: publisher
-      TOPIC: mesh/v1/site-a/ops/up
-      START_DELAY_SECONDS: 3
+    command:
+      - /bin/sh
+      - -lc
+      - sleep 3 && python -m h_mesh_gateway simulate-rf-to-mqtt --env /app/config/examples/ag01.pi-sim.env.example --payload-file /app/docker/integration/fixtures/ops-broadcast.json --json
     restart: "no"
