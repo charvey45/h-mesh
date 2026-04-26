@@ -5,6 +5,13 @@ services:
     restart: unless-stopped
     ports:
       - "1883:1883"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mosquitto_pub -h localhost -t h-mesh/healthcheck -m ok >/dev/null 2>&1
+      interval: 5s
+      timeout: 3s
+      retries: 12
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - management_demo_mqtt_data:/mosquitto/data
@@ -54,7 +61,8 @@ services:
       - "5"
       - --forever
     depends_on:
-      - mqtt-broker
+      mqtt-broker:
+        condition: service_healthy
     volumes:
       - ./state:/data/state
     restart: unless-stopped

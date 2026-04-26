@@ -40,7 +40,11 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             client.username_pw_set(self.username, self.password)
         if self.tls_enabled:
             client.tls_set()
-        client.connect(self.host, self.port, keepalive=30)
+        try:
+            client.connect(self.host, self.port, keepalive=30)
+        except OSError as exc:
+            self._state = BrokerState.DISCONNECTED
+            raise RuntimeError(f"MQTT connect failed: {exc}") from exc
         client.loop_start()
         result = client.publish(topic, payload=payload_json, qos=1, retain=False)
         result.wait_for_publish()
@@ -118,7 +122,11 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         client.on_connect = on_connect
         client.on_subscribe = on_subscribe
         client.on_message = on_message
-        client.connect(self.host, self.port, keepalive=30)
+        try:
+            client.connect(self.host, self.port, keepalive=30)
+        except OSError as exc:
+            self._state = BrokerState.DISCONNECTED
+            raise RuntimeError(f"MQTT connect failed: {exc}") from exc
         client.loop_start()
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:

@@ -167,7 +167,7 @@ Then open `http://localhost:8080`.
 
 ## Working Demo
 
-If you want something visible right now, use the demo stack on this branch:
+If you want something visible right now, use the demo stack:
 
 ```powershell
 docker compose -f docker-compose.management-demo.yml up --build -d
