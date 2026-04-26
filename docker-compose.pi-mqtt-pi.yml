@@ -15,8 +15,6 @@ services:
     container_name: h-mesh-bg02-sim
     depends_on:
       - mqtt-broker
-    volumes:
-      - sim-ready:/ready
     command:
       - python
       - -m
@@ -29,10 +27,15 @@ services:
       - --radio-output
       - /tmp/bg02-radio-out.json
       - --ready-file
-      - /ready/bg02-subscribed.json
+      - /tmp/bg02-subscribed.json
       - --timeout-seconds
       - "20"
       - --json
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/bg02-subscribed.json"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
     restart: "no"
 
   ag01-health-watch:
@@ -42,8 +45,6 @@ services:
     container_name: h-mesh-ag01-health-watch
     depends_on:
       - mqtt-broker
-    volumes:
-      - sim-ready:/ready
     command:
       - python
       - -m
@@ -54,12 +55,17 @@ services:
       - --topic
       - mesh/v1/site-a/gateway/ag01/state
       - --ready-file
-      - /ready/ag01-health-watch-subscribed.json
+      - /tmp/ag01-health-watch-subscribed.json
       - --max-messages
       - "2"
       - --timeout-seconds
       - "20"
       - --json
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ag01-health-watch-subscribed.json"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
     restart: "no"
 
   ag01:
@@ -68,16 +74,20 @@ services:
       dockerfile: docker/integration/Dockerfile
     container_name: h-mesh-ag01-sim
     depends_on:
-      - mqtt-broker
-      - bg02
-      - ag01-health-watch
-    volumes:
-      - sim-ready:/ready
+      mqtt-broker:
+        condition: service_started
+      bg02:
+        condition: service_healthy
+      ag01-health-watch:
+        condition: service_healthy
     command:
-      - /bin/sh
-      - -lc
-      - python -m h_mesh_gateway wait-for-files --path /ready/bg02-subscribed.json --path /ready/ag01-health-watch-subscribed.json --timeout-seconds 20 --json && python -m h_mesh_gateway simulate-rf-to-mqtt --env /app/config/examples/ag01.pi-sim.env.example --payload-file /app/docker/integration/fixtures/ops-broadcast.json --json
+      - python
+      - -m
+      - h_mesh_gateway
+      - simulate-rf-to-mqtt
+      - --env
+      - /app/config/examples/ag01.pi-sim.env.example
+      - --payload-file
+      - /app/docker/integration/fixtures/ops-broadcast.json
+      - --json
     restart: "no"
-
-volumes:
-  sim-ready:

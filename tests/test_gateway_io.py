@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from h_mesh_gateway.adapters import InMemoryBrokerAdapter, InMemoryRadioAdapter
-from h_mesh_gateway.cli import wait_for_paths
 from h_mesh_gateway.health import BrokerState, RadioState
 from h_mesh_gateway.config import load_runtime_config
 from h_mesh_gateway.service import GatewayService
@@ -217,17 +216,3 @@ class GatewayIoTests(unittest.TestCase):
         queue_depths = [json.loads(message.payload_json)["queue_depth"] for message in health_messages]
 
         self.assertEqual(queue_depths, [1, 0])
-
-    def test_wait_for_paths_returns_existing_ready_markers(self) -> None:
-        temp_dir = Path(tempfile.mkdtemp())
-        ready_one = temp_dir / "bg02-ready.json"
-        ready_two = temp_dir / "ag01-health-watch-ready.json"
-        ready_one.write_text("{}", encoding="utf-8")
-        ready_two.write_text("{}", encoding="utf-8")
-
-        resolved = wait_for_paths([ready_one, ready_two], timeout_seconds=0.1)
-
-        self.assertEqual(
-            resolved,
-            [str(ready_one), str(ready_two)],
-        )

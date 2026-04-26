@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import time
 from pathlib import Path
 
 from h_mesh_gateway.adapters import FileRadioAdapter, PahoMqttBrokerAdapter
@@ -134,28 +133,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional file path written after the MQTT subscription is active.",
     )
 
-    wait_files_parser = subparsers.add_parser(
-        "wait-for-files",
-        help="Wait for one or more readiness marker files before continuing.",
-    )
-    wait_files_parser.add_argument(
-        "--path",
-        action="append",
-        dest="paths",
-        required=True,
-        help="Path to a readiness marker file. Repeat the argument for multiple files.",
-    )
-    wait_files_parser.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=20.0,
-        help="Maximum time to wait for the requested files.",
-    )
-    wait_files_parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Render the wait result as JSON.",
-    )
     return parser
 
 
@@ -180,17 +157,6 @@ def write_ready_file(path: Path | None, payload: dict[str, object]) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
-def wait_for_paths(paths: list[Path], timeout_seconds: float) -> list[str]:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        missing = [path for path in paths if not path.exists()]
-        if not missing:
-            return [str(path) for path in paths]
-        time.sleep(0.1)
-    missing = [str(path) for path in paths if not path.exists()]
-    raise RuntimeError(f"Timed out waiting for ready files: {', '.join(missing)}")
 
 
 def build_broker_adapter(config: GatewayRuntimeConfig, *, client_suffix: str) -> PahoMqttBrokerAdapter:
@@ -302,14 +268,6 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 for message in messages
             ],
-        }
-        render_payload(payload, args.json)
-        return 0
-
-    if args.command == "wait-for-files":
-        payload = {
-            "status": "ready",
-            "paths": wait_for_paths([Path(path) for path in args.paths], args.timeout_seconds),
         }
         render_payload(payload, args.json)
         return 0
