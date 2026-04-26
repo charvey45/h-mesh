@@ -83,7 +83,7 @@ class StorageTests(unittest.TestCase):
             DedupeRecord(
                 msg_id="ops-test-0001",
                 source_path="mqtt:site-a->site-b",
-                expires_at="2026-04-26T12:15:00+00:00",
+                expires_at="2030-04-26T12:15:00+00:00",
             )
         )
 
@@ -115,6 +115,33 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(storage.queue_depth(), 0)
         self.assertEqual(storage.list_pending_outbound_events(), [])
 
+    def test_publish_completion_does_not_double_count_an_attempt(self) -> None:
+        storage = self.make_storage()
+        storage.initialize()
+        storage.enqueue_outbound_event(
+            OutboundQueueRecord(
+                msg_id="ops-test-0003",
+                topic="mesh/v1/site-a/ops/up",
+                payload_json='{"msg_id":"ops-test-0003"}',
+            )
+        )
+
+        storage.mark_outbound_attempt("ops-test-0003")
+        storage.mark_outbound_published("ops-test-0003")
+
+        with storage._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT attempt_count, status
+                FROM outbound_queue
+                WHERE msg_id = ?
+                """,
+                ("ops-test-0003",),
+            ).fetchone()
+
+        self.assertEqual(row["attempt_count"], 1)
+        self.assertEqual(row["status"], "published")
+
     def test_expired_outbound_events_leave_audit_row_but_exit_pending_queue(self) -> None:
         storage = self.make_storage()
         storage.initialize()
@@ -131,3 +158,16 @@ class StorageTests(unittest.TestCase):
 
         self.assertEqual(storage.queue_depth(), 0)
         self.assertEqual(storage.list_pending_outbound_events(), [])
+
+    def test_expired_dedupe_record_is_treated_as_unseen(self) -> None:
+        storage = self.make_storage()
+        storage.initialize()
+        storage.remember_seen_message(
+            DedupeRecord(
+                msg_id="ops-test-expired",
+                source_path="mqtt:site-a->site-b",
+                expires_at="2020-04-26T12:15:00+00:00",
+            )
+        )
+
+        self.assertFalse(storage.has_seen_message("ops-test-expired"))

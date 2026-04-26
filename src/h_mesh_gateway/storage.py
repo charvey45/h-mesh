@@ -11,6 +11,13 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def parse_iso_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 SCHEMA_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS message_events (
@@ -294,14 +301,26 @@ class GatewayStorage:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT 1
+                SELECT expires_at
                 FROM dedupe_cache
                 WHERE msg_id = ?
                 LIMIT 1
                 """,
                 (msg_id,),
             ).fetchone()
-        return row is not None
+            if row is None:
+                return False
+            if parse_iso_timestamp(str(row["expires_at"])) <= datetime.now(timezone.utc):
+                connection.execute(
+                    """
+                    DELETE FROM dedupe_cache
+                    WHERE msg_id = ?
+                    """,
+                    (msg_id,),
+                )
+                connection.commit()
+                return False
+        return True
 
     def list_pending_outbound_events(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -351,7 +370,10 @@ class GatewayStorage:
             connection.execute(
                 """
                 UPDATE outbound_queue
-                SET attempt_count = attempt_count + 1,
+                SET attempt_count = CASE
+                        WHEN attempt_count = 0 THEN 1
+                        ELSE attempt_count
+                    END,
                     last_attempt_at = ?,
                     status = 'published'
                 WHERE msg_id = ?

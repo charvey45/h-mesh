@@ -45,6 +45,7 @@ class GatewayService:
     def run_skeleton(self) -> dict[str, object]:
         self._ensure_runtime_paths()
         tables = self.storage.initialize()
+        startup_stamp = self.health.observed_at.strftime("%Y%m%dT%H%M%S%fZ")
         self.storage.record_gateway_observation(
             GatewayObservationRecord(
                 gateway_id=self.config.gateway_id,
@@ -52,7 +53,7 @@ class GatewayService:
                 detail="Gateway skeleton initialized storage",
             )
         )
-        startup_msg_id = f"{self.config.gateway_id}-startup"
+        startup_msg_id = f"{self.config.gateway_id}-startup-{startup_stamp}"
         self.storage.record_message_event(
             MessageEventRecord(
                 msg_id=startup_msg_id,
@@ -67,19 +68,20 @@ class GatewayService:
                 status="recorded",
             )
         )
+        queued_health = self.health.with_states(
+            process_state=ProcessState.READY,
+            radio_state=self._determine_radio_state(),
+            broker_state=self._determine_broker_state(),
+            queue_depth=self.storage.queue_depth() + 1,
+        )
+        self.health = queued_health
         self.storage.enqueue_outbound_event(
             OutboundQueueRecord(
                 msg_id=f"{startup_msg_id}-queued",
                 topic=f"{self.config.mqtt.topic_prefix}/site-{self.config.site_code}/gateway/{self.config.gateway_id}/state",
-                payload_json=json.dumps(self.health.as_dict(), sort_keys=True),
+                payload_json=json.dumps(queued_health.as_dict(), sort_keys=True),
                 status="pending",
             )
-        )
-        self.health = self.health.with_states(
-            process_state=ProcessState.READY,
-            radio_state=self._determine_radio_state(),
-            broker_state=self._determine_broker_state(),
-            queue_depth=self.storage.queue_depth(),
         )
 
         LOGGER.info("Gateway skeleton prepared for %s", self.config.gateway_id)
