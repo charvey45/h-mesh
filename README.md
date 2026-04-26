@@ -82,11 +82,29 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway run-skeleton --env config/examples/site.lab.env.example --json
 ```
 
-Initialize the SQLite schema explicitly:
+This scaffold does not yet implement live serial or broker I/O. It gives the project a concrete runtime layout, validated gateway identity loading, internal health-state handling, and a stable place to add SQLite, MQTT, and Meshtastic adapters next.
+
+## Docker Integration Harness
+
+The repository also includes a Docker-based `pi -> mqtt -> pi` harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.yml). It starts:
+
+- a Mosquitto broker
+- an `ag01` publisher container
+- a `bg02` subscriber container
+
+Bring up the harness directly:
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m h_mesh_gateway init-db --env config/examples/site.lab.env.example --json
+docker compose -f docker-compose.pi-mqtt-pi.yml up --build --abort-on-container-exit --exit-code-from bg02
 ```
 
-This scaffold does not yet implement live serial or broker I/O. It now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, and it includes queue-state helpers for pending, retrying, published, and expired outbound events plus de-duplication tracking for replay-safe bridge behavior.
+Run the gated Python integration test:
+
+```powershell
+$env:RUN_DOCKER_INTEGRATION = "1"
+python -m unittest tests.test_pi_mqtt_pi_docker
+```
+
+The Docker daemon must be running for this integration test. If Docker is installed but the daemon is unavailable, the test skips rather than failing the full local suite.
+
+This harness is intentionally narrow. It proves the Dockerized `pi -> mqtt -> pi` message path before the real gateway MQTT adapter and radio simulator are wired into the service runtime.
