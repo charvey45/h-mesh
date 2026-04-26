@@ -88,6 +88,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the emit report as JSON.",
     )
+    simulate_mqtt_parser.add_argument(
+        "--ready-file",
+        help="Optional file path written after the MQTT subscription is active.",
+    )
 
     publish_health_parser = subparsers.add_parser(
         "publish-health",
@@ -123,6 +127,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the observed messages as JSON.",
     )
+
+    observe_topic_parser.add_argument(
+        "--ready-file",
+        help="Optional file path written after the MQTT subscription is active.",
+    )
+
     return parser
 
 
@@ -142,6 +152,13 @@ def render_payload(payload: dict[str, object], as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
+def write_ready_file(path: Path | None, payload: dict[str, object]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def build_broker_adapter(config: GatewayRuntimeConfig, *, client_suffix: str) -> PahoMqttBrokerAdapter:
     return PahoMqttBrokerAdapter(
         host=config.mqtt.host,
@@ -157,13 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    config = load_runtime_config(Path(args.env))
-
     if args.command == "validate-config":
+        config = load_runtime_config(Path(args.env))
         render_payload(config.as_dict(), args.json)
         return 0
 
     if args.command == "init-db":
+        config = load_runtime_config(Path(args.env))
         configure_logging(config)
         storage = GatewayStorage(config.queue_db_path)
         render_payload(
@@ -176,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "simulate-rf-to-mqtt":
+        config = load_runtime_config(Path(args.env))
         configure_logging(config)
         service = GatewayService(config)
         payload = json.loads(Path(args.payload_file).read_text(encoding="utf-8"))
@@ -187,8 +205,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "simulate-mqtt-to-radio":
+        config = load_runtime_config(Path(args.env))
         configure_logging(config)
         service = GatewayService(config)
+        ready_file = Path(args.ready_file) if args.ready_file else None
         report = service.simulate_mqtt_to_radio(
             topic=args.topic,
             broker=build_broker_adapter(config, client_suffix="mqtt-subscriber"),
@@ -197,11 +217,20 @@ def main(argv: list[str] | None = None) -> int:
                 state=RadioState.HEALTHY if config.radio_enabled else RadioState.MISSING,
             ),
             timeout_seconds=args.timeout_seconds,
+            on_broker_ready=lambda: write_ready_file(
+                ready_file,
+                {
+                    "gateway_id": config.gateway_id,
+                    "topic": args.topic,
+                    "status": "subscribed",
+                },
+            ),
         )
         render_payload(report, args.json)
         return 0
 
     if args.command == "publish-health":
+        config = load_runtime_config(Path(args.env))
         configure_logging(config)
         service = GatewayService(config)
         report = service.publish_health_snapshot(
@@ -212,12 +241,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "observe-topic":
+        config = load_runtime_config(Path(args.env))
         configure_logging(config)
         broker = build_broker_adapter(config, client_suffix="topic-observer")
+        ready_file = Path(args.ready_file) if args.ready_file else None
         messages = broker.receive_many(
             args.topic,
             max_messages=args.max_messages,
             timeout_seconds=args.timeout_seconds,
+            on_ready=lambda: write_ready_file(
+                ready_file,
+                {
+                    "gateway_id": config.gateway_id,
+                    "topic": args.topic,
+                    "status": "subscribed",
+                },
+            ),
         )
         payload = {
             "topic": args.topic,
@@ -233,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         render_payload(payload, args.json)
         return 0
 
+    config = load_runtime_config(Path(args.env))
     configure_logging(config)
     service = GatewayService(config)
     startup_report = service.run_skeleton()

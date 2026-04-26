@@ -119,6 +119,7 @@ The Docker harness in [docker-compose.pi-mqtt-pi.yml](docker-compose.pi-mqtt-pi.
 - `ag01` reads a fixture as simulated RF input and publishes it over [MQTT](https://mqtt.org/)
 - `bg02` subscribes to the topic and emits the received payload through a simulated radio output file
 - `ag01-health-watch` observes the `gateway_state` topic so the harness can assert health transitions on the broker
+- Docker healthchecks wait for active consumer subscriptions instead of relying on a fixed startup delay
 - Mosquitto provides the broker in the middle
 
 Bring up the harness directly:

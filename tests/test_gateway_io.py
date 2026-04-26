@@ -91,6 +91,27 @@ class GatewayIoTests(unittest.TestCase):
         self.assertEqual(report["radio_state"], "healthy")
         self.assertEqual(radio.pop_emission()["msg_id"], "ops-test-0001")
 
+    def test_simulated_mqtt_to_radio_marks_ready_when_subscription_is_active(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir, site_code="b", gateway_id="bg02", radio_enabled=True)
+        config = load_runtime_config(env_path)
+        service = GatewayService(config)
+        broker = InMemoryBrokerAdapter()
+        radio = InMemoryRadioAdapter()
+        broker.publish("mesh/v1/site-a/ops/up", json.dumps(OPS_FIXTURE, sort_keys=True))
+        ready_markers: list[str] = []
+
+        report = service.simulate_mqtt_to_radio(
+            topic="mesh/v1/site-a/ops/up",
+            broker=broker,
+            radio=radio,
+            timeout_seconds=0.1,
+            on_broker_ready=lambda: ready_markers.append("subscribed"),
+        )
+
+        self.assertEqual(report["status"], "emitted")
+        self.assertEqual(ready_markers, ["subscribed"])
+
     def test_duplicate_mqtt_message_is_suppressed(self) -> None:
         temp_dir = Path(tempfile.mkdtemp())
         env_path = self.write_env(temp_dir, site_code="b", gateway_id="bg02", radio_enabled=True)
