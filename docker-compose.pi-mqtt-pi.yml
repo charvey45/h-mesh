@@ -31,6 +31,29 @@ services:
       - --json
     restart: "no"
 
+  ag01-health-watch:
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    container_name: h-mesh-ag01-health-watch
+    depends_on:
+      - mqtt-broker
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - observe-topic
+      - --env
+      - /app/config/examples/ag01.pi-sim.env.example
+      - --topic
+      - mesh/v1/site-a/gateway/ag01/state
+      - --max-messages
+      - "2"
+      - --timeout-seconds
+      - "20"
+      - --json
+    restart: "no"
+
   ag01:
     build:
       context: .
@@ -39,6 +62,7 @@ services:
     depends_on:
       - mqtt-broker
       - bg02
+      - ag01-health-watch
     command:
       - /bin/sh
       - -lc

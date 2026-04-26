@@ -35,6 +35,14 @@ class BrokerAdapter(Protocol):
     def receive_one(self, topic: str, timeout_seconds: float) -> BrokerMessage | None:
         ...
 
+    def receive_many(
+        self,
+        topic: str,
+        max_messages: int,
+        timeout_seconds: float,
+    ) -> list[BrokerMessage]:
+        ...
+
 
 class RadioAdapter(Protocol):
     def current_state(self) -> RadioState:
