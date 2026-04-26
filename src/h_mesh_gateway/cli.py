@@ -7,6 +7,7 @@ from pathlib import Path
 
 from h_mesh_gateway.config import GatewayRuntimeConfig, load_runtime_config
 from h_mesh_gateway.service import GatewayService
+from h_mesh_gateway.storage import GatewayStorage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +36,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the startup report as JSON.",
     )
+
+    init_db_parser = subparsers.add_parser(
+        "init-db",
+        help="Initialize the gateway SQLite schema without starting the service skeleton.",
+    )
+    init_db_parser.add_argument("--env", required=True, help="Path to the env file.")
+    init_db_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the initialized schema report as JSON.",
+    )
     return parser
 
 
@@ -62,6 +74,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "validate-config":
         render_payload(config.as_dict(), args.json)
+        return 0
+
+    if args.command == "init-db":
+        configure_logging(config)
+        storage = GatewayStorage(config.queue_db_path)
+        render_payload(
+            {
+                "queue_db_path": str(config.queue_db_path),
+                "tables": storage.initialize(),
+            },
+            args.json,
+        )
         return 0
 
     configure_logging(config)
