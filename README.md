@@ -118,7 +118,6 @@ Bring up the harness directly:
 ```powershell
 docker compose -f docker-compose.pi-mqtt-pi.yml up --build --abort-on-container-exit --exit-code-from bg02
 ```
-
 Run the gated Python integration test:
 
 ```powershell
