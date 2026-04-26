@@ -232,6 +232,20 @@ class GatewayService:
         timeout_seconds: float = 10.0,
     ) -> dict[str, object]:
         tables = self._initialize_storage()
+        if radio.current_state() != RadioState.HEALTHY:
+            self.storage.record_gateway_observation(
+                GatewayObservationRecord(
+                    gateway_id=self.config.gateway_id,
+                    kind="rf_emit_blocked",
+                    detail=f"Radio unavailable before MQTT consume on {topic}",
+                )
+            )
+            return {
+                "status": "radio_unavailable",
+                "topic": topic,
+                "radio_state": radio.current_state().value,
+                "storage_tables": tables,
+            }
         message = broker.receive_one(topic, timeout_seconds)
         if message is None:
             self.storage.record_gateway_observation(
@@ -287,22 +301,6 @@ class GatewayService:
                 status="recorded",
             )
         )
-        if radio.current_state() != RadioState.HEALTHY:
-            self.storage.record_gateway_observation(
-                GatewayObservationRecord(
-                    gateway_id=self.config.gateway_id,
-                    kind="rf_emit_blocked",
-                    detail=f"Radio unavailable for {msg_id}",
-                    related_msg_id=msg_id,
-                )
-            )
-            return {
-                "status": "radio_unavailable",
-                "msg_id": msg_id,
-                "topic": topic,
-                "radio_state": radio.current_state().value,
-                "storage_tables": tables,
-            }
         emission = radio.emit(message.payload_json)
         self.storage.remember_seen_message(
             DedupeRecord(

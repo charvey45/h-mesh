@@ -156,3 +156,4 @@ class GatewayIoTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "radio_unavailable")
         self.assertEqual(report["radio_state"], "missing")
+        self.assertIsNotNone(broker.receive_one("mesh/v1/site-a/ops/up", 0.1))
