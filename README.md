@@ -82,4 +82,11 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway run-skeleton --env config/examples/site.lab.env.example --json
 ```
 
-This scaffold does not yet implement live serial or broker I/O. It gives the project a concrete runtime layout, validated gateway identity loading, internal health-state handling, and a stable place to add SQLite, MQTT, and Meshtastic adapters next.
+Initialize the SQLite schema explicitly:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway init-db --env config/examples/site.lab.env.example --json
+```
+
+This scaffold does not yet implement live serial or broker I/O. It now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, and it includes queue-state helpers for pending, retrying, published, and expired outbound events plus de-duplication tracking for replay-safe bridge behavior.

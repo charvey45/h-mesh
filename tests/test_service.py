@@ -36,3 +36,13 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue((temp_dir / "state").exists())
         self.assertEqual(report["gateway_id"], "ag01")
         self.assertEqual(report["health"]["radio_state"], "missing")
+        self.assertEqual(report["health"]["queue_depth"], 1)
+        self.assertEqual(
+            report["storage_tables"],
+            [
+                "dedupe_cache",
+                "gateway_observations",
+                "message_events",
+                "outbound_queue",
+            ],
+        )
