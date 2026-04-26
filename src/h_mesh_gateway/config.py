@@ -35,6 +35,7 @@ class GatewayRuntimeConfig:
     gateway_id: str
     device_role: str
     log_level: str
+    log_file_path: Path | None
     state_dir: Path
     queue_db_path: Path
     policy_file: Path | None
@@ -49,6 +50,7 @@ class GatewayRuntimeConfig:
             "gateway_id": self.gateway_id,
             "device_role": self.device_role,
             "log_level": self.log_level,
+            "log_file_path": str(self.log_file_path) if self.log_file_path else None,
             "state_dir": str(self.state_dir),
             "queue_db_path": str(self.queue_db_path),
             "policy_file": str(self.policy_file) if self.policy_file else None,
@@ -145,6 +147,7 @@ def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
         gateway_id=gateway_id,
         device_role=device_role,
         log_level=values.get("LOG_LEVEL", "INFO").strip() or "INFO",
+        log_file_path=resolve_path(values.get("LOG_FILE_PATH"), base_dir),
         state_dir=state_dir,
         queue_db_path=queue_db_path,
         policy_file=resolve_path(values.get("POLICY_FILE"), base_dir),

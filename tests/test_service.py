@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from h_mesh_gateway.adapters import InMemoryBrokerAdapter
 from h_mesh_gateway.config import load_runtime_config
 from h_mesh_gateway.service import GatewayService
 
@@ -23,6 +24,7 @@ class ServiceTests(unittest.TestCase):
                     "MQTT_TLS_ENABLED=false",
                     f"STATE_DIR={temp_dir / 'state'}",
                     f"QUEUE_DB_PATH={temp_dir / 'state' / 'queue.sqlite3'}",
+                    f"LOG_FILE_PATH={temp_dir / 'state' / 'gateway.log'}",
                     "RADIO_ENABLED=false",
                 ]
             ),
@@ -46,6 +48,7 @@ class ServiceTests(unittest.TestCase):
             report["storage_tables"],
             [
                 "dedupe_cache",
+                "gateway_health_snapshots",
                 "gateway_observations",
                 "message_events",
                 "outbound_queue",
@@ -72,3 +75,19 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(first_report["health"]["queue_depth"], 1)
         self.assertEqual(second_report["health"]["queue_depth"], 2)
+
+    def test_publish_health_snapshot_persists_health_history(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir)
+
+        config = load_runtime_config(env_path)
+        service = GatewayService(config)
+        broker = InMemoryBrokerAdapter()
+
+        service.publish_health_snapshot(broker)
+
+        latest = service.storage.latest_gateway_health()
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["gateway_id"], "ag01")
+        self.assertEqual(latest["delivery_state"], "published")
+        self.assertEqual(latest["broker_state"], "connected")

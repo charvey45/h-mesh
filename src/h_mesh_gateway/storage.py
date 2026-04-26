@@ -49,6 +49,20 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS gateway_health_snapshots (
+        snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        gateway_id TEXT NOT NULL,
+        site_code TEXT NOT NULL,
+        process_state TEXT NOT NULL,
+        broker_state TEXT NOT NULL,
+        radio_state TEXT NOT NULL,
+        queue_depth INTEGER NOT NULL,
+        topic TEXT NOT NULL,
+        delivery_state TEXT NOT NULL,
+        observed_at TEXT NOT NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS outbound_queue (
         queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
         msg_id TEXT NOT NULL UNIQUE,
@@ -127,6 +141,34 @@ class OutboundQueueRecord:
             status=self.status,
             expires_at=self.expires_at,
             queued_at=utc_now_iso(),
+        )
+
+
+@dataclass(slots=True)
+class GatewayHealthSnapshotRecord:
+    gateway_id: str
+    site_code: str
+    process_state: str
+    broker_state: str
+    radio_state: str
+    queue_depth: int
+    topic: str
+    delivery_state: str
+    observed_at: str = ""
+
+    def normalize(self) -> "GatewayHealthSnapshotRecord":
+        if self.observed_at:
+            return self
+        return GatewayHealthSnapshotRecord(
+            gateway_id=self.gateway_id,
+            site_code=self.site_code,
+            process_state=self.process_state,
+            broker_state=self.broker_state,
+            radio_state=self.radio_state,
+            queue_depth=self.queue_depth,
+            topic=self.topic,
+            delivery_state=self.delivery_state,
+            observed_at=utc_now_iso(),
         )
 
 
@@ -271,6 +313,38 @@ class GatewayStorage:
             connection.commit()
             return int(cursor.lastrowid)
 
+    def record_gateway_health_snapshot(self, record: GatewayHealthSnapshotRecord) -> int:
+        normalized = record.normalize()
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO gateway_health_snapshots (
+                    gateway_id,
+                    site_code,
+                    process_state,
+                    broker_state,
+                    radio_state,
+                    queue_depth,
+                    topic,
+                    delivery_state,
+                    observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized.gateway_id,
+                    normalized.site_code,
+                    normalized.process_state,
+                    normalized.broker_state,
+                    normalized.radio_state,
+                    normalized.queue_depth,
+                    normalized.topic,
+                    normalized.delivery_state,
+                    normalized.observed_at,
+                ),
+            )
+            connection.commit()
+            return int(cursor.lastrowid)
+
     def queue_depth(self) -> int:
         with self._connection() as connection:
             row = connection.execute(
@@ -281,6 +355,18 @@ class GatewayStorage:
                 """
             ).fetchone()
         return int(row["queue_depth"])
+
+    def queue_status_counts(self) -> dict[str, int]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT status, COUNT(*) AS status_count
+                FROM outbound_queue
+                GROUP BY status
+                ORDER BY status ASC
+                """
+            ).fetchall()
+        return {str(row["status"]): int(row["status_count"]) for row in rows}
 
     def remember_seen_message(self, record: DedupeRecord) -> None:
         normalized = record.normalize()
@@ -353,6 +439,104 @@ class GatewayStorage:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def latest_gateway_health(self) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    gateway_id,
+                    site_code,
+                    process_state,
+                    broker_state,
+                    radio_state,
+                    queue_depth,
+                    topic,
+                    delivery_state,
+                    observed_at
+                FROM gateway_health_snapshots
+                ORDER BY observed_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return None if row is None else dict(row)
+
+    def list_gateway_health_snapshots(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    gateway_id,
+                    site_code,
+                    process_state,
+                    broker_state,
+                    radio_state,
+                    queue_depth,
+                    topic,
+                    delivery_state,
+                    observed_at
+                FROM gateway_health_snapshots
+                ORDER BY observed_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_recent_gateway_observations(
+        self,
+        *,
+        limit: int = 100,
+        kinds: tuple[str, ...] | None = None,
+    ) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            if kinds:
+                placeholders = ",".join("?" for _ in kinds)
+                rows = connection.execute(
+                    f"""
+                    SELECT
+                        observation_id,
+                        gateway_id,
+                        observed_at,
+                        kind,
+                        detail,
+                        related_msg_id
+                    FROM gateway_observations
+                    WHERE kind IN ({placeholders})
+                    ORDER BY observed_at DESC
+                    LIMIT ?
+                    """,
+                    (*kinds, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT
+                        observation_id,
+                        gateway_id,
+                        observed_at,
+                        kind,
+                        detail,
+                        related_msg_id
+                    FROM gateway_observations
+                    ORDER BY observed_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_gateway_observations_by_kind(self) -> dict[str, int]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT kind, COUNT(*) AS kind_count
+                FROM gateway_observations
+                GROUP BY kind
+                ORDER BY kind ASC
+                """
+            ).fetchall()
+        return {str(row["kind"]): int(row["kind_count"]) for row in rows}
 
     def mark_outbound_attempt(
         self,
