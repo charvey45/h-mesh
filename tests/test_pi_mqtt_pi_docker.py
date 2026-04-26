@@ -58,5 +58,8 @@ class DockerPiMqttPiTests(unittest.TestCase):
                 f"stderr:\n{up.stderr}"
             )
 
+        self.assertIn('"status": "published"', up.stdout)
+        self.assertIn('"status": "emitted"', up.stdout)
         self.assertIn('"msg_id": "ops-test-0001"', up.stdout)
-        self.assertIn('"target_scope": "site-b-ops"', up.stdout)
+        self.assertIn('"queue_depth": 1', up.stdout)
+        self.assertIn('"queue_depth": 0', up.stdout)

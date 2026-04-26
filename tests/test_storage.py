@@ -129,7 +129,7 @@ class StorageTests(unittest.TestCase):
         storage.mark_outbound_attempt("ops-test-0003")
         storage.mark_outbound_published("ops-test-0003")
 
-        with storage._connect() as connection:
+        with storage._connection() as connection:
             row = connection.execute(
                 """
                 SELECT attempt_count, status

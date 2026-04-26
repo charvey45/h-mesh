@@ -4,6 +4,9 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir paho-mqtt==2.1.0
 
-COPY docker/integration/endpoint.py /app/endpoint.py
+COPY pyproject.toml README.md /app/
+COPY src /app/src
+COPY config /app/config
+COPY docker /app/docker
 
-ENTRYPOINT ["python", "/app/endpoint.py"]
+ENV PYTHONPATH=/app/src
