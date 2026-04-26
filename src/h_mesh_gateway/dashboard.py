@@ -47,6 +47,32 @@ def render_sparkline(points: list[int], *, width: int = 220, height: int = 56) -
     )
 
 
+def summarize_sensor_payload(payload_json: str) -> tuple[str, str]:
+    try:
+        payload = json.loads(payload_json)
+    except json.JSONDecodeError:
+        return ("unknown", "invalid json payload")
+
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        return ("unknown", "missing sensor payload")
+
+    sensor_set = str(body.get("sensor_set", "unknown"))
+    metrics = body.get("metrics")
+    if not isinstance(metrics, list):
+        return (sensor_set, "no metrics")
+
+    metric_parts: list[str] = []
+    for metric in metrics[:4]:
+        if not isinstance(metric, dict):
+            continue
+        name = str(metric.get("name", "metric"))
+        value = metric.get("value")
+        unit = str(metric.get("unit", "")).strip()
+        metric_parts.append(f"{name}={value}{unit}" if unit else f"{name}={value}")
+    return (sensor_set, ", ".join(metric_parts) if metric_parts else "no metrics")
+
+
 class ManagementRepository:
     def __init__(self, *, state_dir: Path, log_dir: Path | None = None) -> None:
         self.state_dir = state_dir
@@ -68,6 +94,7 @@ class ManagementRepository:
     def management_snapshot(self) -> dict[str, object]:
         gateways: list[dict[str, object]] = []
         recent_failures: list[dict[str, object]] = []
+        recent_sensor_events: list[dict[str, object]] = []
         failure_counts: dict[str, int] = {}
         queue_status_totals: dict[str, int] = {}
         total_queue_depth = 0
@@ -117,8 +144,31 @@ class ManagementRepository:
                     }
                 )
 
+            for event in storage.list_recent_message_events(
+                limit=20,
+                channels=("sensor",),
+                msg_types=("sensor_report",),
+            ):
+                sensor_set, metric_summary = summarize_sensor_payload(str(event["payload_json"]))
+                recent_sensor_events.append(
+                    {
+                        "database_path": str(db_path),
+                        "msg_id": str(event["msg_id"]),
+                        "source": str(event["source"]),
+                        "source_site": str(event["source_site"]),
+                        "captured_at": str(event["captured_at"]),
+                        "observed_by": str(event["observed_by"]),
+                        "sensor_set": sensor_set,
+                        "metric_summary": metric_summary,
+                    }
+                )
+
         recent_failures.sort(
             key=lambda row: parse_iso_timestamp(str(row["observed_at"])),
+            reverse=True,
+        )
+        recent_sensor_events.sort(
+            key=lambda row: parse_iso_timestamp(str(row["captured_at"])),
             reverse=True,
         )
         gateways.sort(key=lambda row: str(row["gateway_id"]))
@@ -130,6 +180,7 @@ class ManagementRepository:
             "failure_counts": failure_counts,
             "gateways": gateways,
             "recent_failures": recent_failures[:25],
+            "recent_sensor_events": recent_sensor_events[:25],
         }
 
     def recent_logs(self, *, max_lines: int = 120) -> list[dict[str, object]]:
@@ -150,6 +201,7 @@ def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, obje
     failure_counts = snapshot["failure_counts"]
     gateways = snapshot["gateways"]
     recent_failures = snapshot["recent_failures"]
+    recent_sensor_events = snapshot["recent_sensor_events"]
 
     gateway_rows = "".join(
         (
@@ -178,6 +230,19 @@ def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, obje
             "</tr>"
         )
         for row in recent_failures
+    )
+
+    sensor_rows = "".join(
+        (
+            "<tr>"
+            f"<td>{html.escape(str(row['captured_at']))}</td>"
+            f"<td>{html.escape(str(row['source']))}</td>"
+            f"<td>{html.escape(str(row['sensor_set']))}</td>"
+            f"<td>{html.escape(str(row['metric_summary']))}</td>"
+            f"<td>{html.escape(str(row['observed_by']))}</td>"
+            "</tr>"
+        )
+        for row in recent_sensor_events
     )
 
     log_sections = "".join(
@@ -296,6 +361,7 @@ def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, obje
     <div class="card"><div class="label">Health Publish Failed</div><div class="metric">{failure_counts.get("gateway_state_publish_failed", 0)}</div></div>
     <div class="card"><div class="label">MQTT Receive Timeout</div><div class="metric">{failure_counts.get("mqtt_receive_timeout", 0)}</div></div>
     <div class="card"><div class="label">RF Emit Blocked</div><div class="metric">{failure_counts.get("rf_emit_blocked", 0)}</div></div>
+    <div class="card"><div class="label">Recent Sensor Reports</div><div class="metric">{len(recent_sensor_events)}</div></div>
   </div>
   <section>
     <h2>Gateway health</h2>
@@ -314,6 +380,21 @@ def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, obje
         </tr>
       </thead>
       <tbody>{gateway_rows or '<tr><td colspan="9">No gateway state found.</td></tr>'}</tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Recent sensor traffic</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Captured</th>
+          <th>Source</th>
+          <th>Sensor Set</th>
+          <th>Metrics</th>
+          <th>Observed By</th>
+        </tr>
+      </thead>
+      <tbody>{sensor_rows or '<tr><td colspan="5">No sensor events recorded.</td></tr>'}</tbody>
     </table>
   </section>
   <div class="two-col">

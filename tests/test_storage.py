@@ -77,6 +77,46 @@ class StorageTests(unittest.TestCase):
         self.assertGreater(observation_id, 0)
         self.assertGreater(event_id, 0)
 
+    def test_list_recent_message_events_can_filter_sensor_reports(self) -> None:
+        storage = self.make_storage()
+        storage.initialize()
+        storage.record_message_event(
+            MessageEventRecord(
+                msg_id="sensor-test-0001",
+                msg_type="sensor_report",
+                source="as01",
+                source_site="a",
+                channel="sensor",
+                captured_at="2026-04-26T10:00:00+00:00",
+                observed_by="ag01",
+                direction="rf_in",
+                payload_json='{"payload":{"sensor_set":"clock"}}',
+                status="recorded",
+            )
+        )
+        storage.record_message_event(
+            MessageEventRecord(
+                msg_id="ops-test-0001",
+                msg_type="ops_broadcast",
+                source="ar01",
+                source_site="a",
+                channel="ops",
+                captured_at="2026-04-26T10:01:00+00:00",
+                observed_by="ag01",
+                direction="rf_in",
+                payload_json="{}",
+                status="recorded",
+            )
+        )
+
+        rows = storage.list_recent_message_events(
+            channels=("sensor",),
+            msg_types=("sensor_report",),
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["msg_id"], "sensor-test-0001")
+
     def test_records_health_snapshot_and_latest_health(self) -> None:
         storage = self.make_storage()
         storage.initialize()
