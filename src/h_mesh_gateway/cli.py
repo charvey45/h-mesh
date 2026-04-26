@@ -127,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render the observed messages as JSON.",
     )
+    observe_topic_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Exit zero even when fewer than the requested messages are observed.",
+    )
 
     observe_topic_parser.add_argument(
         "--ready-file",
@@ -150,6 +155,27 @@ def render_payload(payload: dict[str, object], as_json: bool) -> None:
 
     for key, value in payload.items():
         print(f"{key}: {value}")
+
+
+def build_observe_topic_payload(
+    topic: str,
+    messages: list[object],
+    *,
+    expected_message_count: int,
+) -> dict[str, object]:
+    return {
+        "status": "complete" if len(messages) >= expected_message_count else "timeout",
+        "topic": topic,
+        "expected_message_count": expected_message_count,
+        "message_count": len(messages),
+        "messages": [
+            {
+                "topic": message.topic,
+                "payload": json.loads(message.payload_json),
+            }
+            for message in messages
+        ],
+    }
 
 
 def write_ready_file(path: Path | None, payload: dict[str, object]) -> None:
@@ -258,18 +284,14 @@ def main(argv: list[str] | None = None) -> int:
                 },
             ),
         )
-        payload = {
-            "topic": args.topic,
-            "message_count": len(messages),
-            "messages": [
-                {
-                    "topic": message.topic,
-                    "payload": json.loads(message.payload_json),
-                }
-                for message in messages
-            ],
-        }
+        payload = build_observe_topic_payload(
+            args.topic,
+            messages,
+            expected_message_count=args.max_messages,
+        )
         render_payload(payload, args.json)
+        if not args.allow_partial and len(messages) < args.max_messages:
+            return 1
         return 0
 
     config = load_runtime_config(Path(args.env))
