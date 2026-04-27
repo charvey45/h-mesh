@@ -1,3 +1,5 @@
+"""Local management dashboard for gateway state, queue depth, and recent events."""
+
 from __future__ import annotations
 
 import html
@@ -20,15 +22,15 @@ FAILURE_OBSERVATION_KINDS = (
 
 
 def tail_text_file(path: Path, *, max_lines: int = 200) -> list[str]:
+    """Return the last lines of a text file if it exists."""
     if not path.exists():
         return []
-    # The first dashboard cut favors portability over efficiency and reads the file directly.
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     return lines[-max_lines:]
 
 
 def render_sparkline(points: list[int], *, width: int = 220, height: int = 56) -> str:
-    # Sparklines give operators trend visibility without forcing them into a separate charting system.
+    """Render a small inline SVG queue-depth chart."""
     if not points:
         return '<svg viewBox="0 0 220 56" width="220" height="56"><text x="10" y="30" fill="#64748b" font-size="12">no data</text></svg>'
     if len(points) == 1:
@@ -51,7 +53,7 @@ def render_sparkline(points: list[int], *, width: int = 220, height: int = 56) -
 
 
 def summarize_sensor_payload(payload_json: str) -> tuple[str, str]:
-    # The dashboard only needs a short human-readable summary, not the full nested payload.
+    """Summarize a sensor payload into a compact human-readable row."""
     try:
         payload = json.loads(payload_json)
     except json.JSONDecodeError:
@@ -78,32 +80,30 @@ def summarize_sensor_payload(payload_json: str) -> tuple[str, str]:
 
 
 class ManagementRepository:
+    """Read-only summary view over one or more gateway state databases."""
+
     def __init__(self, *, state_dir: Path, log_dir: Path | None = None) -> None:
-        # The repository is a read-only view over one shared state directory produced by
-        # one or more gateways. It does not own the data; it only summarizes it.
         self.state_dir = state_dir
         self.log_dir = log_dir or state_dir
 
     def database_paths(self) -> list[Path]:
-        # Each SQLite file is treated as one gateway-local state source.
+        """Return SQLite database files available in the state directory."""
         if not self.state_dir.exists():
             return []
         return sorted(self.state_dir.glob("*.sqlite3"))
 
     def log_paths(self) -> list[Path]:
-        # Log files are stored separately from the SQLite files but usually share the same directory.
+        """Return log files available in the log directory."""
         if not self.log_dir.exists():
             return []
         return sorted(self.log_dir.glob("*.log"))
 
     def _storage_for(self, path: Path) -> GatewayStorage:
-        # Keep storage construction local so a future cache layer can be introduced here without
-        # changing the rest of the summary logic.
+        """Build a storage reader for one gateway database."""
         return GatewayStorage(path)
 
     def management_snapshot(self) -> dict[str, object]:
-        # This method builds the complete API/dashboard summary in one pass so the HTML view
-        # and the JSON API stay in sync.
+        """Build the full management summary consumed by the API and HTML dashboard."""
         gateways: list[dict[str, object]] = []
         recent_failures: list[dict[str, object]] = []
         recent_sensor_events: list[dict[str, object]] = []
@@ -115,18 +115,15 @@ class ManagementRepository:
             storage = self._storage_for(db_path)
             latest_health = storage.latest_gateway_health()
             if latest_health is None:
-                # Skip empty databases because they do not yet have operator-meaningful health state.
                 continue
 
             queue_depth = int(latest_health["queue_depth"])
             total_queue_depth += queue_depth
 
-            # Merge per-gateway queue status counts into one management-wide total.
             queue_status_counts = storage.queue_status_counts()
             for status, count in queue_status_counts.items():
                 queue_status_totals[status] = queue_status_totals.get(status, 0) + count
 
-            # The dashboard summary cards only care about the operator-visible failure subset.
             observation_counts = storage.count_gateway_observations_by_kind()
             for kind in FAILURE_OBSERVATION_KINDS:
                 count = observation_counts.get(kind)
@@ -134,7 +131,6 @@ class ManagementRepository:
                     continue
                 failure_counts[kind] = failure_counts.get(kind, 0) + count
 
-            # Keep the dashboard graph small and cheap so one busy gateway does not dominate page render time.
             health_history = list(reversed(storage.list_gateway_health_snapshots(limit=24)))
             gateways.append(
                 {
@@ -156,7 +152,6 @@ class ManagementRepository:
                 limit=20,
                 kinds=FAILURE_OBSERVATION_KINDS,
             ):
-                # Keep the database path with each row so multi-gateway summaries remain traceable.
                 recent_failures.append(
                     {
                         **observation,
@@ -169,7 +164,6 @@ class ManagementRepository:
                 channels=("sensor",),
                 msg_types=("sensor_report",),
             ):
-                # Sensor summaries stay normalized here so simulated and future real sensors render the same way.
                 sensor_set, metric_summary = summarize_sensor_payload(str(event["payload_json"]))
                 recent_sensor_events.append(
                     {
@@ -188,7 +182,6 @@ class ManagementRepository:
             key=lambda row: parse_iso_timestamp(str(row["observed_at"])),
             reverse=True,
         )
-        # Sort most recent first because the dashboard is primarily an operational "what happened lately" view.
         recent_sensor_events.sort(
             key=lambda row: parse_iso_timestamp(str(row["captured_at"])),
             reverse=True,
@@ -206,7 +199,7 @@ class ManagementRepository:
         }
 
     def recent_logs(self, *, max_lines: int = 120) -> list[dict[str, object]]:
-        # Logs are returned as named sections so the UI can show multiple gateways without losing provenance.
+        """Return recent log tails for each available gateway log file."""
         log_entries: list[dict[str, object]] = []
         for log_path in self.log_paths():
             log_entries.append(
@@ -220,8 +213,7 @@ class ManagementRepository:
 
 
 def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, object]]) -> str:
-    # The HTML renderer stays deliberately self-contained: no template engine, no extra assets,
-    # and no JavaScript dependency is required for the first operator dashboard.
+    """Render the management summary as a standalone HTML document."""
     queue_status_totals = snapshot["queue_status_totals"]
     failure_counts = snapshot["failure_counts"]
     gateways = snapshot["gateways"]
@@ -447,10 +439,10 @@ def render_dashboard_html(snapshot: dict[str, object], logs: list[dict[str, obje
 
 
 def build_management_handler(repo: ManagementRepository):
-    # Build a request handler bound to one repository instance so tests can inject a temporary state directory.
+    """Build an HTTP request handler bound to one management repository."""
+
     class ManagementHandler(BaseHTTPRequestHandler):
         def _respond_json(self, payload: dict[str, object]) -> None:
-            # JSON endpoints are intended for automation, integration checks, and future API consumers.
             body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -459,7 +451,6 @@ def build_management_handler(repo: ManagementRepository):
             self.wfile.write(body)
 
         def _respond_html(self, body: str) -> None:
-            # HTML is the human operator surface.
             payload = body.encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -468,22 +459,20 @@ def build_management_handler(repo: ManagementRepository):
             self.wfile.write(payload)
 
         def do_GET(self) -> None:  # noqa: N802
+            """Serve a small set of dashboard and API endpoints."""
             parsed = urlparse(self.path)
             if parsed.path == "/healthz":
-                # healthz only proves the dashboard HTTP process is alive, not that the gateway data is healthy.
                 self.send_response(HTTPStatus.OK)
                 self.end_headers()
                 self.wfile.write(b"ok")
                 return
 
             if parsed.path == "/api/summary":
-                # Keep the API contract aligned with the HTML dashboard so operators can script against one source.
                 self._respond_json(repo.management_snapshot())
                 return
 
             if parsed.path == "/api/logs":
                 query = parse_qs(parsed.query)
-                # Allow callers to trim the log tail size without changing the dashboard default.
                 max_lines = int(query.get("lines", ["120"])[0])
                 self._respond_json({"logs": repo.recent_logs(max_lines=max_lines)})
                 return
@@ -498,8 +487,7 @@ def build_management_handler(repo: ManagementRepository):
             self.send_error(HTTPStatus.NOT_FOUND, "not found")
 
         def log_message(self, format: str, *args) -> None:  # noqa: A003
-            # Suppress the default HTTP server log noise because the dashboard is usually run
-            # under a parent process or container runtime that already captures stdout/stderr.
+            """Suppress default BaseHTTPRequestHandler access logging."""
             return
 
     return ManagementHandler
@@ -512,7 +500,7 @@ def run_dashboard_server(
     host: str,
     port: int,
 ) -> None:
-    # ThreadingHTTPServer is enough for the small read-only dashboard and keeps dependencies minimal.
+    """Run the local dashboard HTTP server until interrupted."""
     repo = ManagementRepository(state_dir=state_dir, log_dir=log_dir)
     server = ThreadingHTTPServer((host, port), build_management_handler(repo))
     try:

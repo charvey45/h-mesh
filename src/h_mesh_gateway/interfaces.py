@@ -1,3 +1,5 @@
+"""Protocol definitions for broker and radio adapter boundaries."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -10,28 +12,31 @@ from h_mesh_gateway.health import BrokerState, RadioState
 
 @dataclass(slots=True)
 class AdapterStatus:
-    # Reserved for future richer adapter status surfaces. It remains simple for now.
+    """Reserved status shape for future richer adapter reporting."""
+
     state: str
     detail: str
 
 
 @dataclass(slots=True)
 class BrokerMessage:
-    # This is the minimal broker payload shape the service layer cares about.
+    """Minimal MQTT message shape used by the service layer."""
+
     topic: str
     payload_json: str
 
 
 @dataclass(slots=True)
 class RadioEmission:
-    # The radio side returns both where the payload went and what was emitted.
+    """Result returned by radio emit operations."""
+
     path: Path
     payload_json: str
 
 
 class BrokerAdapter(Protocol):
-    # The BrokerAdapter protocol defines exactly what the service expects from any MQTT boundary,
-    # whether it is a real broker client or an in-memory test double.
+    """Behavior required from any MQTT-facing adapter implementation."""
+
     def current_state(self) -> BrokerState:
         ...
 
@@ -57,8 +62,8 @@ class BrokerAdapter(Protocol):
 
 
 class RadioAdapter(Protocol):
-    # The RadioAdapter protocol keeps the service blind to whether "radio" means a file,
-    # an in-memory queue, or a future serial-connected device.
+    """Behavior required from any radio-facing adapter implementation."""
+
     def current_state(self) -> RadioState:
         ...
 

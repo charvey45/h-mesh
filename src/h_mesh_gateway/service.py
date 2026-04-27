@@ -1,3 +1,9 @@
+"""Gateway service orchestration for the Phase 1 scaffold.
+
+The service coordinates local storage, broker publication, health snapshots,
+duplicate suppression, and simulated relay paths between RF and MQTT.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -29,21 +35,20 @@ LOGGER = logging.getLogger(__name__)
 
 
 class GatewayService:
+    """Coordinate local gateway state and message movement across system boundaries."""
+
     def __init__(self, config: GatewayRuntimeConfig) -> None:
-        # The service owns the durable gateway state machine: local storage, health view,
-        # and the policy around how messages move between RF and MQTT.
         self.config = config
         self.health = initial_health_snapshot(config.gateway_id, config.site_code)
         self.storage = GatewayStorage(config.queue_db_path)
 
     def _ensure_runtime_paths(self) -> None:
-        # The queue database and related state should be able to bootstrap themselves on a clean host.
+        """Create the directories required for local runtime state."""
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
         self.config.queue_db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _determine_radio_state(self) -> RadioState:
-        # Phase 1 infers radio state from config. Later versions can replace this with
-        # live serial probing without changing the higher-level service contract.
+        """Infer radio state from the configured runtime shape."""
         if not self.config.radio_enabled:
             return RadioState.MISSING
         if self.config.serial_port:
@@ -51,31 +56,29 @@ class GatewayService:
         return RadioState.UNHEALTHY
 
     def _determine_broker_state(self) -> BrokerState:
-        # MQTT integration is intentionally stubbed in this scaffold.
+        """Return the current broker state for scaffold-only startup paths."""
         return BrokerState.UNKNOWN
 
     def _initialize_storage(self) -> list[str]:
-        # Storage initialization is idempotent and safe to call before every major workflow.
+        """Initialize the local SQLite schema and return the created table names."""
         self._ensure_runtime_paths()
         return self.storage.initialize()
 
     def _resolve_event_topic(self, payload: dict[str, object]) -> str:
-        # Topic layout is site- and channel-scoped so remote consumers can subscribe narrowly.
+        """Resolve the MQTT topic for a normalized message payload."""
         source_site = str(payload["source_site"])
         channel = str(payload["channel"])
         return f"{self.config.mqtt.topic_prefix}/site-{source_site}/{channel}/up"
 
     def _health_topic(self) -> str:
-        # Health lives under a gateway-specific topic because operators often need to
-        # inspect one gateway without consuming all site traffic.
+        """Return the MQTT topic used for gateway health publication."""
         return (
             f"{self.config.mqtt.topic_prefix}/site-{self.config.site_code}/gateway/"
             f"{self.config.gateway_id}/state"
         )
 
     def _persist_health_snapshot(self, *, topic: str, delivery_state: str) -> None:
-        # Persist health locally even when broker publication fails. The dashboard and later
-        # archival paths should still have something to inspect.
+        """Persist a health snapshot to local storage."""
         self.storage.record_gateway_health_snapshot(
             GatewayHealthSnapshotRecord(
                 gateway_id=self.config.gateway_id,
@@ -91,8 +94,7 @@ class GatewayService:
         )
 
     def _resolve_expiry(self, payload: dict[str, object]) -> str:
-        # Prefer an explicit expires_at from the payload. Otherwise infer a bounded lifetime
-        # so queued or deduped messages do not live forever.
+        """Resolve or infer a bounded expiry timestamp for a message payload."""
         expires_at = payload.get("expires_at")
         if isinstance(expires_at, str) and expires_at:
             return expires_at
@@ -109,9 +111,8 @@ class GatewayService:
         radio_state: RadioState | None = None,
         queue_depth: int | None = None,
     ) -> dict[str, object]:
+        """Publish the current gateway health snapshot to MQTT and local storage."""
         self._initialize_storage()
-        # Health publication computes the latest local queue depth so the broker-view and
-        # local-view of the gateway stay aligned.
         self.health = self.health.with_states(
             process_state=ProcessState.READY,
             broker_state=broker_state or BrokerState.CONNECTED,
@@ -144,6 +145,7 @@ class GatewayService:
         radio_state: RadioState | None = None,
         queue_depth: int | None = None,
     ) -> dict[str, object] | None:
+        """Attempt to publish health and fall back to local-only persistence on failure."""
         try:
             return self.publish_health_snapshot(
                 broker,
@@ -152,8 +154,6 @@ class GatewayService:
                 queue_depth=queue_depth,
             )
         except RuntimeError as exc:
-            # A failed broker publish should still leave a local-only breadcrumb explaining
-            # that health changed even though the broker never saw the update.
             self._persist_health_snapshot(
                 topic=self._health_topic(),
                 delivery_state="local_only",
@@ -173,10 +173,9 @@ class GatewayService:
             return None
 
     def run_skeleton(self) -> dict[str, object]:
+        """Initialize the gateway scaffold without live adapters."""
         tables = self._initialize_storage()
         startup_stamp = self.health.observed_at.strftime("%Y%m%dT%H%M%S%fZ")
-        # Record an explicit startup observation so operators can tell the difference between
-        # "never ran" and "ran but did not connect anywhere yet."
         self.storage.record_gateway_observation(
             GatewayObservationRecord(
                 gateway_id=self.config.gateway_id,
@@ -185,8 +184,6 @@ class GatewayService:
             )
         )
         startup_msg_id = f"{self.config.gateway_id}-startup-{startup_stamp}"
-        # Store a synthetic internal event so the schema has representative data even before
-        # any live relay traffic exists.
         self.storage.record_message_event(
             MessageEventRecord(
                 msg_id=startup_msg_id,
@@ -208,7 +205,6 @@ class GatewayService:
             queue_depth=self.storage.queue_depth() + 1,
         )
         self.health = queued_health
-        # Queue a startup health snapshot instead of pretending it already reached MQTT.
         self.storage.enqueue_outbound_event(
             OutboundQueueRecord(
                 msg_id=f"{startup_msg_id}-queued",
@@ -245,6 +241,7 @@ class GatewayService:
         payload: dict[str, object],
         broker: BrokerAdapter,
     ) -> dict[str, object]:
+        """Record an RF-observed message and attempt to publish it to MQTT."""
         tables = self._initialize_storage()
         msg_id = str(payload["msg_id"])
         # De-dupe before doing any new work so replayed or looped traffic does not fan out again.
@@ -266,7 +263,6 @@ class GatewayService:
             }
 
         payload_json = json.dumps(payload, sort_keys=True)
-        # Record what was observed on the RF side before attempting MQTT publication.
         self.storage.record_message_event(
             MessageEventRecord(
                 msg_id=msg_id,
@@ -310,8 +306,6 @@ class GatewayService:
             radio_state=self._determine_radio_state(),
             queue_depth=self.storage.queue_depth(),
         )
-        # The pre-publish health call is primarily about surfacing queue depth and broker state
-        # changes around the attempted publish.
         try:
             broker.publish(topic, payload_json)
         except RuntimeError as exc:
@@ -374,6 +368,7 @@ class GatewayService:
         timeout_seconds: float = 10.0,
         on_broker_ready: Callable[[], None] | None = None,
     ) -> dict[str, object]:
+        """Consume one MQTT message and emit it through the radio boundary."""
         tables = self._initialize_storage()
         # When the radio is unavailable, do not consume the MQTT message and silently discard
         # the possibility of local delivery. Report the blocked condition instead.
@@ -403,7 +398,6 @@ class GatewayService:
                 "health_topic": health_report["topic"],
                 "storage_tables": tables,
             }
-        # Only consume one MQTT message for this simulation path so the handoff is easy to assert in tests.
         message = broker.receive_one(topic, timeout_seconds, on_ready=on_broker_ready)
         if message is None:
             LOGGER.warning("Timed out waiting for MQTT message on %s", topic)
@@ -442,7 +436,6 @@ class GatewayService:
                 "storage_tables": tables,
             }
 
-        # Persist the inbound broker event before pushing it out to the radio side.
         self.storage.record_message_event(
             MessageEventRecord(
                 msg_id=msg_id,
@@ -464,7 +457,6 @@ class GatewayService:
             )
         )
         emission = radio.emit(message.payload_json)
-        # Remember the message id after successful local emission so future repeats can be suppressed.
         self.storage.remember_seen_message(
             DedupeRecord(
                 msg_id=msg_id,

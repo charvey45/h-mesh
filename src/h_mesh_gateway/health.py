@@ -1,3 +1,5 @@
+"""Health-state model for the gateway scaffold."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -6,7 +8,8 @@ from enum import StrEnum
 
 
 class ProcessState(StrEnum):
-    # ProcessState describes the local gateway process lifecycle rather than remote connectivity.
+    """Lifecycle states for the local gateway process."""
+
     STARTING = "starting"
     READY = "ready"
     STOPPED = "stopped"
@@ -14,7 +17,8 @@ class ProcessState(StrEnum):
 
 
 class RadioState(StrEnum):
-    # RadioState captures whether the gateway believes local RF transmission is possible.
+    """Health states for the local RF boundary."""
+
     UNKNOWN = "unknown"
     HEALTHY = "healthy"
     MISSING = "missing"
@@ -22,7 +26,8 @@ class RadioState(StrEnum):
 
 
 class BrokerState(StrEnum):
-    # BrokerState captures the WAN-side MQTT connectivity view.
+    """Health states for the MQTT broker boundary."""
+
     UNKNOWN = "unknown"
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
@@ -30,7 +35,8 @@ class BrokerState(StrEnum):
 
 @dataclass(slots=True)
 class GatewayHealthSnapshot:
-    # This is the normalized health object that gets serialized to MQTT and persisted locally.
+    """Normalized health document shared by MQTT publication and local storage."""
+
     gateway_id: str
     site: str
     process_state: ProcessState
@@ -47,8 +53,7 @@ class GatewayHealthSnapshot:
         broker_state: BrokerState | None = None,
         queue_depth: int | None = None,
     ) -> "GatewayHealthSnapshot":
-        # Replacing the dataclass instead of mutating it keeps each transition self-contained
-        # and guarantees observed_at reflects the moment the new state was produced.
+        """Return a new snapshot with selected state fields updated."""
         return replace(
             self,
             process_state=process_state or self.process_state,
@@ -59,7 +64,7 @@ class GatewayHealthSnapshot:
         )
 
     def as_dict(self) -> dict[str, object]:
-        # Serialize enums to plain strings so the health document is JSON-native.
+        """Serialize the health snapshot into a JSON-ready dictionary."""
         return {
             "gateway_id": self.gateway_id,
             "site": self.site,
@@ -72,7 +77,7 @@ class GatewayHealthSnapshot:
 
 
 def initial_health_snapshot(gateway_id: str, site: str) -> GatewayHealthSnapshot:
-    # New gateways always start in STARTING/UNKNOWN until the runtime determines radio and broker state.
+    """Build the initial health state for a just-started gateway process."""
     return GatewayHealthSnapshot(
         gateway_id=gateway_id,
         site=site,
