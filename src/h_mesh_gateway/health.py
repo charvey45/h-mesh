@@ -6,6 +6,7 @@ from enum import StrEnum
 
 
 class ProcessState(StrEnum):
+    # ProcessState describes the local gateway process lifecycle rather than remote connectivity.
     STARTING = "starting"
     READY = "ready"
     STOPPED = "stopped"
@@ -13,6 +14,7 @@ class ProcessState(StrEnum):
 
 
 class RadioState(StrEnum):
+    # RadioState captures whether the gateway believes local RF transmission is possible.
     UNKNOWN = "unknown"
     HEALTHY = "healthy"
     MISSING = "missing"
@@ -20,6 +22,7 @@ class RadioState(StrEnum):
 
 
 class BrokerState(StrEnum):
+    # BrokerState captures the WAN-side MQTT connectivity view.
     UNKNOWN = "unknown"
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
@@ -27,6 +30,7 @@ class BrokerState(StrEnum):
 
 @dataclass(slots=True)
 class GatewayHealthSnapshot:
+    # This is the normalized health object that gets serialized to MQTT and persisted locally.
     gateway_id: str
     site: str
     process_state: ProcessState
@@ -43,6 +47,8 @@ class GatewayHealthSnapshot:
         broker_state: BrokerState | None = None,
         queue_depth: int | None = None,
     ) -> "GatewayHealthSnapshot":
+        # Replacing the dataclass instead of mutating it keeps each transition self-contained
+        # and guarantees observed_at reflects the moment the new state was produced.
         return replace(
             self,
             process_state=process_state or self.process_state,
@@ -53,6 +59,7 @@ class GatewayHealthSnapshot:
         )
 
     def as_dict(self) -> dict[str, object]:
+        # Serialize enums to plain strings so the health document is JSON-native.
         return {
             "gateway_id": self.gateway_id,
             "site": self.site,
@@ -65,6 +72,7 @@ class GatewayHealthSnapshot:
 
 
 def initial_health_snapshot(gateway_id: str, site: str) -> GatewayHealthSnapshot:
+    # New gateways always start in STARTING/UNKNOWN until the runtime determines radio and broker state.
     return GatewayHealthSnapshot(
         gateway_id=gateway_id,
         site=site,
