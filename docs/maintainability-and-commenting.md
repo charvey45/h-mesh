@@ -19,6 +19,8 @@ Add explanation generously when it helps, but use the Python-native form for Pyt
 - class docstrings for ownership, invariants, and boundaries
 - function or method docstrings for behavior, inputs, outputs, and failure modes
 - inline comments only when the local control flow is still non-obvious
+- for embedded SQL or other DSL-heavy Python, prefer named wrapper objects with
+  purpose text over loose narrative comments when practical
 
 Useful explanation targets include:
 

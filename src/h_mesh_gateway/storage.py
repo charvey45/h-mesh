@@ -27,76 +27,102 @@ def parse_iso_timestamp(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+@dataclass(frozen=True, slots=True)
+class SchemaStatement:
+    """One embedded schema statement plus its human-readable purpose."""
+
+    name: str
+    purpose: str
+    sql: str
+
+
 SCHEMA_STATEMENTS = (
-    # message_events is the historical record of traffic the gateway observed or relayed.
-    """
-    CREATE TABLE IF NOT EXISTS message_events (
-        event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        msg_id TEXT NOT NULL,
-        msg_type TEXT NOT NULL,
-        source TEXT NOT NULL,
-        source_site TEXT NOT NULL,
-        target TEXT,
-        target_scope TEXT,
-        channel TEXT NOT NULL,
-        captured_at TEXT NOT NULL,
-        observed_by TEXT NOT NULL,
-        direction TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
-        status TEXT NOT NULL,
-        stored_at TEXT NOT NULL
-    )
-    """,
-    # gateway_observations captures notable events such as duplicate suppression,
-    # publish failures, timeouts, and successful emits.
-    """
-    CREATE TABLE IF NOT EXISTS gateway_observations (
-        observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        gateway_id TEXT NOT NULL,
-        observed_at TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        detail TEXT NOT NULL,
-        related_msg_id TEXT
-    )
-    """,
-    # gateway_health_snapshots stores the operator-facing state view used by the dashboard.
-    """
-    CREATE TABLE IF NOT EXISTS gateway_health_snapshots (
-        snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        gateway_id TEXT NOT NULL,
-        site_code TEXT NOT NULL,
-        process_state TEXT NOT NULL,
-        broker_state TEXT NOT NULL,
-        radio_state TEXT NOT NULL,
-        queue_depth INTEGER NOT NULL,
-        topic TEXT NOT NULL,
-        delivery_state TEXT NOT NULL,
-        observed_at TEXT NOT NULL
-    )
-    """,
-    # outbound_queue is the durable replay path for traffic that should reach MQTT.
-    """
-    CREATE TABLE IF NOT EXISTS outbound_queue (
-        queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        msg_id TEXT NOT NULL UNIQUE,
-        topic TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
-        queued_at TEXT NOT NULL,
-        expires_at TEXT,
-        attempt_count INTEGER NOT NULL DEFAULT 0,
-        last_attempt_at TEXT,
-        status TEXT NOT NULL
-    )
-    """,
-    # dedupe_cache bounds replay loops and duplicate reinjection across the bridge.
-    """
-    CREATE TABLE IF NOT EXISTS dedupe_cache (
-        msg_id TEXT PRIMARY KEY,
-        first_seen_at TEXT NOT NULL,
-        source_path TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-    )
-    """,
+    SchemaStatement(
+        name="message_events",
+        purpose="Historical record of traffic the gateway observed or relayed.",
+        sql="""
+        CREATE TABLE IF NOT EXISTS message_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            msg_id TEXT NOT NULL,
+            msg_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            source_site TEXT NOT NULL,
+            target TEXT,
+            target_scope TEXT,
+            channel TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            observed_by TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            stored_at TEXT NOT NULL
+        )
+        """,
+    ),
+    SchemaStatement(
+        name="gateway_observations",
+        purpose=(
+            "Operator-relevant observations such as duplicate suppression, publish "
+            "failures, timeouts, and successful emits."
+        ),
+        sql="""
+        CREATE TABLE IF NOT EXISTS gateway_observations (
+            observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gateway_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            detail TEXT NOT NULL,
+            related_msg_id TEXT
+        )
+        """,
+    ),
+    SchemaStatement(
+        name="gateway_health_snapshots",
+        purpose="Operator-facing gateway state snapshots used by the dashboard.",
+        sql="""
+        CREATE TABLE IF NOT EXISTS gateway_health_snapshots (
+            snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gateway_id TEXT NOT NULL,
+            site_code TEXT NOT NULL,
+            process_state TEXT NOT NULL,
+            broker_state TEXT NOT NULL,
+            radio_state TEXT NOT NULL,
+            queue_depth INTEGER NOT NULL,
+            topic TEXT NOT NULL,
+            delivery_state TEXT NOT NULL,
+            observed_at TEXT NOT NULL
+        )
+        """,
+    ),
+    SchemaStatement(
+        name="outbound_queue",
+        purpose="Durable replay path for traffic that should reach MQTT.",
+        sql="""
+        CREATE TABLE IF NOT EXISTS outbound_queue (
+            queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            msg_id TEXT NOT NULL UNIQUE,
+            topic TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            queued_at TEXT NOT NULL,
+            expires_at TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_attempt_at TEXT,
+            status TEXT NOT NULL
+        )
+        """,
+    ),
+    SchemaStatement(
+        name="dedupe_cache",
+        purpose="Bounded duplicate-suppression cache for replay loops and reinjection.",
+        sql="""
+        CREATE TABLE IF NOT EXISTS dedupe_cache (
+            msg_id TEXT PRIMARY KEY,
+            first_seen_at TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        )
+        """,
+    ),
 )
 
 
@@ -244,7 +270,7 @@ class GatewayStorage:
         """Create the Phase 1 schema if needed and return the created table names."""
         with self._connection() as connection:
             for statement in SCHEMA_STATEMENTS:
-                connection.execute(statement)
+                connection.execute(statement.sql)
             connection.commit()
             rows = connection.execute(
                 """
