@@ -9,10 +9,12 @@ from typing import Any
 
 
 def utc_now_iso() -> str:
+    # Store all timestamps in UTC ISO 8601 so logs, SQLite records, and JSON payloads line up cleanly.
     return datetime.now(timezone.utc).isoformat()
 
 
 def parse_iso_timestamp(value: str) -> datetime:
+    # Normalize timestamps to timezone-aware UTC values before comparing them.
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
@@ -20,6 +22,7 @@ def parse_iso_timestamp(value: str) -> datetime:
 
 
 SCHEMA_STATEMENTS = (
+    # message_events is the historical record of traffic the gateway observed or relayed.
     """
     CREATE TABLE IF NOT EXISTS message_events (
         event_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +41,8 @@ SCHEMA_STATEMENTS = (
         stored_at TEXT NOT NULL
     )
     """,
+    # gateway_observations captures notable events such as duplicate suppression,
+    # publish failures, timeouts, and successful emits.
     """
     CREATE TABLE IF NOT EXISTS gateway_observations (
         observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +53,7 @@ SCHEMA_STATEMENTS = (
         related_msg_id TEXT
     )
     """,
+    # gateway_health_snapshots stores the operator-facing state view used by the dashboard.
     """
     CREATE TABLE IF NOT EXISTS gateway_health_snapshots (
         snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +68,7 @@ SCHEMA_STATEMENTS = (
         observed_at TEXT NOT NULL
     )
     """,
+    # outbound_queue is the durable replay path for traffic that should reach MQTT.
     """
     CREATE TABLE IF NOT EXISTS outbound_queue (
         queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +82,7 @@ SCHEMA_STATEMENTS = (
         status TEXT NOT NULL
     )
     """,
+    # dedupe_cache bounds replay loops and duplicate reinjection across the bridge.
     """
     CREATE TABLE IF NOT EXISTS dedupe_cache (
         msg_id TEXT PRIMARY KEY,
@@ -88,6 +96,8 @@ SCHEMA_STATEMENTS = (
 
 @dataclass(slots=True)
 class MessageEventRecord:
+    # This record shape closely mirrors the normalized application protocol envelope plus
+    # gateway-specific observation metadata.
     msg_id: str
     msg_type: str
     source: str
@@ -104,6 +114,8 @@ class MessageEventRecord:
 
 @dataclass(slots=True)
 class GatewayObservationRecord:
+    # Observations are intentionally free-form enough to capture operator-relevant events
+    # without needing a schema migration for every new detail string.
     gateway_id: str
     kind: str
     detail: str
@@ -111,6 +123,7 @@ class GatewayObservationRecord:
     observed_at: str = ""
 
     def normalize(self) -> "GatewayObservationRecord":
+        # Fill in observed_at lazily so callers can supply a specific timestamp only when needed.
         if self.observed_at:
             return self
         return GatewayObservationRecord(
@@ -124,6 +137,7 @@ class GatewayObservationRecord:
 
 @dataclass(slots=True)
 class OutboundQueueRecord:
+    # Outbound queue records model the broker delivery work that may need to survive restarts.
     msg_id: str
     topic: str
     payload_json: str
@@ -132,6 +146,7 @@ class OutboundQueueRecord:
     queued_at: str = ""
 
     def normalize(self) -> "OutboundQueueRecord":
+        # queued_at defaults to "now" when the caller is simply enqueueing fresh work.
         if self.queued_at:
             return self
         return OutboundQueueRecord(
@@ -146,6 +161,7 @@ class OutboundQueueRecord:
 
 @dataclass(slots=True)
 class GatewayHealthSnapshotRecord:
+    # Health snapshots are stored locally even if broker publication later fails.
     gateway_id: str
     site_code: str
     process_state: str
@@ -157,6 +173,7 @@ class GatewayHealthSnapshotRecord:
     observed_at: str = ""
 
     def normalize(self) -> "GatewayHealthSnapshotRecord":
+        # Like the other record types, default timestamps are filled in at write time.
         if self.observed_at:
             return self
         return GatewayHealthSnapshotRecord(
@@ -174,12 +191,14 @@ class GatewayHealthSnapshotRecord:
 
 @dataclass(slots=True)
 class DedupeRecord:
+    # The dedupe cache remembers a message id long enough to prevent replay loops but not forever.
     msg_id: str
     source_path: str
     expires_at: str
     first_seen_at: str = ""
 
     def normalize(self) -> "DedupeRecord":
+        # first_seen_at defaults to the local write time when not supplied by the caller.
         if self.first_seen_at:
             return self
         return DedupeRecord(
@@ -195,6 +214,7 @@ class GatewayStorage:
         self.db_path = db_path
 
     def _connect(self) -> sqlite3.Connection:
+        # Create the parent directory on demand so a clean gateway host can bootstrap itself.
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
@@ -202,6 +222,8 @@ class GatewayStorage:
 
     @contextmanager
     def _connection(self):
+        # Use a short-lived connection per operation. That keeps the storage layer simple and
+        # avoids sharing one SQLite handle across unrelated CLI runs or tests.
         connection = self._connect()
         try:
             yield connection
@@ -225,6 +247,7 @@ class GatewayStorage:
         return [str(row["name"]) for row in rows]
 
     def record_message_event(self, record: MessageEventRecord) -> int:
+        # Message events are append-only historical records.
         with self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -265,6 +288,7 @@ class GatewayStorage:
 
     def record_gateway_observation(self, record: GatewayObservationRecord) -> int:
         normalized = record.normalize()
+        # Normalize before insert so observed_at is always present in storage.
         with self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -289,6 +313,7 @@ class GatewayStorage:
 
     def enqueue_outbound_event(self, record: OutboundQueueRecord) -> int:
         normalized = record.normalize()
+        # Queue records are inserted before broker publish so a replay path already exists on failure.
         with self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -315,6 +340,7 @@ class GatewayStorage:
 
     def record_gateway_health_snapshot(self, record: GatewayHealthSnapshotRecord) -> int:
         normalized = record.normalize()
+        # Health snapshots are append-only so operators can inspect historical state transitions later.
         with self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -346,6 +372,7 @@ class GatewayStorage:
             return int(cursor.lastrowid)
 
     def queue_depth(self) -> int:
+        # Only count work that still needs broker delivery attention.
         with self._connection() as connection:
             row = connection.execute(
                 """
@@ -357,6 +384,7 @@ class GatewayStorage:
         return int(row["queue_depth"])
 
     def queue_status_counts(self) -> dict[str, int]:
+        # This powers dashboard summary cards and gives operators a quick queue-state breakdown.
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -370,6 +398,7 @@ class GatewayStorage:
 
     def remember_seen_message(self, record: DedupeRecord) -> None:
         normalized = record.normalize()
+        # Update expiry on conflict so a re-observed message can extend its suppression window.
         with self._connection() as connection:
             connection.execute(
                 """
@@ -405,6 +434,7 @@ class GatewayStorage:
             ).fetchone()
             if row is None:
                 return False
+            # Expired de-dupe entries should not suppress new traffic, so prune them as they are noticed.
             if parse_iso_timestamp(str(row["expires_at"])) <= datetime.now(timezone.utc):
                 connection.execute(
                     """
@@ -418,6 +448,7 @@ class GatewayStorage:
         return True
 
     def list_pending_outbound_events(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        # Pending and retrying are the queue states that still need operational attention.
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -441,6 +472,7 @@ class GatewayStorage:
         return [dict(row) for row in rows]
 
     def latest_gateway_health(self) -> dict[str, Any] | None:
+        # The dashboard usually wants only the latest state view for each database.
         with self._connection() as connection:
             row = connection.execute(
                 """
@@ -462,6 +494,7 @@ class GatewayStorage:
         return None if row is None else dict(row)
 
     def list_gateway_health_snapshots(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        # Historical snapshots back queue-depth graphs and timeline inspection.
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -489,6 +522,7 @@ class GatewayStorage:
         limit: int = 100,
         kinds: tuple[str, ...] | None = None,
     ) -> list[dict[str, Any]]:
+        # Optional kind filtering keeps the dashboard focused on the subset of observations it is summarizing.
         with self._connection() as connection:
             if kinds:
                 placeholders = ",".join("?" for _ in kinds)
@@ -527,6 +561,7 @@ class GatewayStorage:
         return [dict(row) for row in rows]
 
     def count_gateway_observations_by_kind(self) -> dict[str, int]:
+        # Counting by kind is cheaper for dashboards than pulling every observation row.
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -545,6 +580,7 @@ class GatewayStorage:
         channels: tuple[str, ...] | None = None,
         msg_types: tuple[str, ...] | None = None,
     ) -> list[dict[str, Any]]:
+        # Build the WHERE clause dynamically so callers can filter by channel, type, both, or neither.
         where_clauses: list[str] = []
         params: list[Any] = []
 
@@ -594,6 +630,7 @@ class GatewayStorage:
         status: str = "retrying",
         attempted_at: str | None = None,
     ) -> None:
+        # Every publish attempt increments the counter so replay and failure analysis can see churn.
         with self._connection() as connection:
             connection.execute(
                 """
@@ -608,6 +645,7 @@ class GatewayStorage:
             connection.commit()
 
     def mark_outbound_published(self, msg_id: str, *, published_at: str | None = None) -> None:
+        # A freshly published record should show at least one attempt even if it succeeded on the first try.
         with self._connection() as connection:
             connection.execute(
                 """
@@ -625,6 +663,7 @@ class GatewayStorage:
             connection.commit()
 
     def mark_outbound_expired(self, msg_id: str) -> None:
+        # Expiration is modeled as a terminal queue state rather than deleting the row outright.
         with self._connection() as connection:
             connection.execute(
                 """

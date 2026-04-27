@@ -1,14 +1,22 @@
+# Example logical channel map for a site.
+# This file is documentation-first: it shows how the human, sensor, and control
+# channels can be described before a stricter policy engine is implemented.
+
+# The default human channel for shared traffic.
 primary_channel: ops
 
 channels:
+  # Human operator chat. Gateways and radios can participate here.
   - name: ops
     purpose: human communication
     member_types: ["g", "r"]
     bridge_to_mqtt: true
+  # Telemetry channel for sensors and gateway-generated state.
   - name: sensor
     purpose: telemetry and state reporting
     member_types: ["g", "s"]
     bridge_to_mqtt: true
+  # Control is intentionally distinct because it carries higher risk and stricter policy.
   - name: control
     purpose: supervised automation commands
     member_types: ["g", "s"]

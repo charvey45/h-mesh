@@ -15,11 +15,16 @@ from h_mesh_gateway.storage import GatewayStorage
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # The CLI is the main operator and developer entrypoint. Each subcommand maps to one
+    # of the runtime flows described in the docs so a maintainer can line up documentation
+    # with an actual runnable command.
     parser = argparse.ArgumentParser(
         description="Run or validate the h-mesh gateway service scaffold."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # validate-config is intentionally read-only. It confirms that the env file is coherent
+    # before the service touches any local state or talks to MQTT.
     validate_parser = subparsers.add_parser(
         "validate-config", help="Load and validate a gateway env file."
     )
@@ -30,6 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the validated runtime config as JSON.",
     )
 
+    # run-skeleton brings up local state without live integrations. It is the safest
+    # first-run command on a fresh host or branch.
     run_parser = subparsers.add_parser(
         "run-skeleton",
         help="Initialize the gateway service scaffold without live adapters.",
@@ -41,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the startup report as JSON.",
     )
 
+    # init-db lets operators create or repair the SQLite schema explicitly.
     init_db_parser = subparsers.add_parser(
         "init-db",
         help="Initialize the gateway SQLite schema without starting the service skeleton.",
@@ -52,6 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the initialized schema report as JSON.",
     )
 
+    # simulate-rf-to-mqtt exercises the ingress half of the bridge.
     simulate_rf_parser = subparsers.add_parser(
         "simulate-rf-to-mqtt",
         help="Read a fixture as simulated RF input and publish it through the gateway MQTT adapter.",
@@ -68,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the publish report as JSON.",
     )
 
+    # simulate-mqtt-to-radio exercises the egress half of the bridge and writes to a
+    # file-backed radio adapter so the handoff can be inspected directly.
     simulate_mqtt_parser = subparsers.add_parser(
         "simulate-mqtt-to-radio",
         help="Consume one MQTT message and emit it through the simulated radio adapter.",
@@ -95,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional file path written after the MQTT subscription is active.",
     )
 
+    # Health publication is its own command because operators often need to verify broker
+    # reachability and management visibility independently of message traffic.
     publish_health_parser = subparsers.add_parser(
         "publish-health",
         help="Publish a gateway health snapshot on the documented gateway state topic.",
@@ -106,6 +119,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the health publish report as JSON.",
     )
 
+    # The synthetic clock sensor gives the management stack live-looking traffic even when
+    # no custom sensor hardware is present.
     clock_sensor_parser = subparsers.add_parser(
         "run-clock-sensor",
         help="Publish synthetic clock-based sensor reports through the gateway path.",
@@ -143,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the emission report as JSON when the command exits.",
     )
 
+    # observe-topic is both a human debugging tool and a harness assertion tool.
     observe_topic_parser = subparsers.add_parser(
         "observe-topic",
         help="Observe one or more MQTT messages on a topic and print them as JSON.",
@@ -177,6 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional file path written after the MQTT subscription is active.",
     )
 
+    # The dashboard runs against persisted state and logs, so it bypasses the gateway env file.
     dashboard_parser = subparsers.add_parser(
         "run-dashboard",
         help="Run the local management dashboard against a shared gateway state directory.",
@@ -206,6 +223,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def configure_logging(config: GatewayRuntimeConfig) -> None:
+    # Always keep a stream handler so logs are visible in terminals and container logs.
+    # Add a file handler only when the runtime config asks for persistent local logs.
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     if config.log_file_path:
         config.log_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +238,7 @@ def configure_logging(config: GatewayRuntimeConfig) -> None:
 
 
 def render_payload(payload: dict[str, object], as_json: bool) -> None:
+    # JSON output is for scripts and tests; flat output is for manual interactive use.
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
@@ -233,6 +253,8 @@ def build_observe_topic_payload(
     *,
     expected_message_count: int,
 ) -> dict[str, object]:
+    # A timeout still returns what was observed so callers can decide whether a partial
+    # read is usable or should fail the workflow.
     return {
         "status": "complete" if len(messages) >= expected_message_count else "timeout",
         "topic": topic,
@@ -249,6 +271,7 @@ def build_observe_topic_payload(
 
 
 def write_ready_file(path: Path | None, payload: dict[str, object]) -> None:
+    # Ready files are the simplest bridge between Python runtime state and Docker healthchecks.
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -256,6 +279,7 @@ def write_ready_file(path: Path | None, payload: dict[str, object]) -> None:
 
 
 def build_broker_adapter(config: GatewayRuntimeConfig, *, client_suffix: str) -> PahoMqttBrokerAdapter:
+    # Suffix the client id so broker logs can distinguish publisher, observer, and sensor roles.
     return PahoMqttBrokerAdapter(
         host=config.mqtt.host,
         port=config.mqtt.port,
@@ -270,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    # The dashboard command has its own input model and does not need gateway env parsing.
     if args.command == "run-dashboard":
         run_dashboard_server(
             state_dir=Path(args.state_dir).resolve(),
@@ -301,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         config = load_runtime_config(Path(args.env))
         configure_logging(config)
         service = GatewayService(config)
+        # Fixtures are expected to already match the documented message envelope.
         payload = json.loads(Path(args.payload_file).read_text(encoding="utf-8"))
         report = service.simulate_rf_to_mqtt(
             payload,
@@ -325,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             on_broker_ready=lambda: write_ready_file(
                 ready_file,
                 {
+                    # Keep the ready file self-describing so startup sequencing is easier to debug.
                     "gateway_id": config.gateway_id,
                     "topic": args.topic,
                     "status": "subscribed",
@@ -385,10 +412,13 @@ def main(argv: list[str] | None = None) -> int:
             expected_message_count=args.max_messages,
         )
         render_payload(payload, args.json)
+        # Integration callers usually want a non-zero exit code when the broker delivered
+        # fewer messages than expected.
         if not args.allow_partial and len(messages) < args.max_messages:
             return 1
         return 0
 
+    # Default path: initialize local storage and startup state without live adapters.
     config = load_runtime_config(Path(args.env))
     configure_logging(config)
     service = GatewayService(config)

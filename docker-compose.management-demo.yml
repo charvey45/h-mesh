@@ -1,3 +1,5 @@
+# Demo stack that shows the dashboard and a synthetic sensor publisher end to end.
+# This is the quickest visible system for checking queue depth, health snapshots, and sensor traffic.
 services:
   mqtt-broker:
     image: eclipse-mosquitto:2
@@ -6,6 +8,7 @@ services:
     ports:
       - "1883:1883"
     healthcheck:
+      # Publish a trivial message to prove the broker listener is ready for clients.
       test:
         - CMD-SHELL
         - mosquitto_pub -h localhost -t h-mesh/healthcheck -m ok >/dev/null 2>&1
@@ -23,6 +26,7 @@ services:
       dockerfile: docker/dashboard/Dockerfile
     container_name: h-mesh-management-dashboard
     command:
+      # Serve the dashboard against the shared state mount produced by the demo gateway context.
       - python
       - -m
       - h_mesh_gateway
@@ -38,6 +42,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      # The dashboard and clock sensor share this host-backed directory so the UI can read live data.
       - ./state:/data/state
     restart: unless-stopped
 
@@ -47,6 +52,7 @@ services:
       dockerfile: docker/dashboard/Dockerfile
     container_name: h-mesh-clock-sensor
     command:
+      # This synthetic sensor never exits; it keeps producing normalized sensor_report messages.
       - python
       - -m
       - h_mesh_gateway
@@ -68,5 +74,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Keep broker state across restarts during demo sessions.
   management_demo_mqtt_data:
   management_demo_mqtt_log:

@@ -1,9 +1,12 @@
+# Integration harness for the documented ag01 -> MQTT -> bg02 flow.
+# This stack is intentionally disposable and exists to prove the gateway code path, not to model production.
 services:
   mqtt-broker:
     image: eclipse-mosquitto:2
     container_name: h-mesh-pi-mqtt-pi-broker
     restart: "no"
     ports:
+      # Use 1884 on the host so this harness can run alongside the normal lab broker on 1883.
       - "1884:1883"
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -16,6 +19,7 @@ services:
     depends_on:
       - mqtt-broker
     command:
+      # bg02 blocks waiting for MQTT, then emits the payload to a file-backed radio adapter.
       - python
       - -m
       - h_mesh_gateway
@@ -32,6 +36,7 @@ services:
       - "20"
       - --json
     healthcheck:
+      # The subscriber writes a ready file after the MQTT subscription is actually active.
       test: ["CMD", "test", "-f", "/tmp/bg02-subscribed.json"]
       interval: 1s
       timeout: 1s
@@ -46,6 +51,7 @@ services:
     depends_on:
       - mqtt-broker
     command:
+      # A separate observer watches the gateway health topic so the harness can assert health publication.
       - python
       - -m
       - h_mesh_gateway
@@ -62,6 +68,7 @@ services:
       - "20"
       - --json
     healthcheck:
+      # Like bg02, the observer advertises readiness through a file once the broker subscription is live.
       test: ["CMD", "test", "-f", "/tmp/ag01-health-watch-subscribed.json"]
       interval: 1s
       timeout: 1s
@@ -74,6 +81,7 @@ services:
       dockerfile: docker/integration/Dockerfile
     container_name: h-mesh-ag01-sim
     depends_on:
+      # ag01 only starts publishing after the broker is up and both subscribers are ready.
       mqtt-broker:
         condition: service_started
       bg02:
@@ -81,6 +89,7 @@ services:
       ag01-health-watch:
         condition: service_healthy
     command:
+      # ag01 injects a fixture as if it arrived over RF and lets the gateway service bridge it to MQTT.
       - python
       - -m
       - h_mesh_gateway
