@@ -9,6 +9,7 @@ from h_mesh_gateway.service import GatewayService
 
 
 def utc_now() -> datetime:
+    # Isolate time acquisition so tests can inject deterministic timestamps.
     return datetime.now(timezone.utc)
 
 
@@ -35,16 +36,19 @@ def build_clock_sensor_payload(
             "sensor_set": sensor_set,
             "metrics": [
                 {
+                    # epoch_s is useful as a universal machine-readable timestamp field.
                     "name": "epoch_s",
                     "value": int(observed_at.timestamp()),
                     "unit": "s",
                 },
                 {
+                    # minute_of_day makes it easy to spot daily cycles when looking at synthetic data.
                     "name": "minute_of_day",
                     "value": minute_of_day,
                     "unit": "m",
                 },
                 {
+                    # second_of_minute changes every publish and makes each sample visibly distinct.
                     "name": "second_of_minute",
                     "value": observed_at.second,
                     "unit": "s",
@@ -69,6 +73,7 @@ def run_clock_sensor(
     if not forever and count < 1:
         raise ValueError("count must be at least 1 when forever is false")
 
+    # Return a full run report so the CLI can print or serialize exactly what was emitted.
     reports: list[dict[str, object]] = []
     emitted_count = 0
 
@@ -91,6 +96,7 @@ def run_clock_sensor(
         )
         emitted_count += 1
         if forever or emitted_count < count:
+            # Sleep only between emissions so a finite run returns immediately after the last sample.
             sleep_fn(interval_seconds)
 
     return {
