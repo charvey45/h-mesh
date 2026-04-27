@@ -42,6 +42,7 @@ The proposed solution combines:
 
 - [Overview](docs/overview.md)
 - [Architecture](docs/architecture.md)
+- [Deployment Architecture](docs/deployment-architecture.md)
 - [Gateway Service Design](docs/gateway-service-design.md)
 - [Gateway Acceptance Test Plan](docs/gateway-acceptance-tests.md)
 - [Transport Constraints](docs/transport-constraints.md)
@@ -59,6 +60,27 @@ The proposed solution combines:
 - [Sensor Components](docs/component-sensor.md)
 - [Cloud Components](docs/component-cloud.md)
 - [Private Configuration](docs/private-configuration.md)
+- [Operator Guide: MQTT Broker](docs/operator-guide-broker.md)
+- [Operator Guide: Gateway Pi](docs/operator-guide-gateway.md)
+- [Operator Guide: Meshtastic Radios](docs/operator-guide-radio.md)
+- [Operator Guide: Custom Sensors](docs/operator-guide-sensor.md)
+- [Maintainability And Commenting](docs/maintainability-and-commenting.md)
+
+## Deployment Model
+
+Deployment is intentionally split by component family:
+
+- MQTT infrastructure should be provisioned with `Terraform` and run as a pinned broker runtime
+- gateway Pis should receive versioned application artifacts through GitHub-driven release workflows
+- radios should be managed as firmware and config-profile devices
+- custom sensors should ship from their own versioned release pipelines when they diverge from the shared gateway codebase
+
+Public design and implementation can stay in this repository, while infrastructure and private configuration can live in separate repositories such as:
+
+- `h-mesh`
+- `h-mesh-infra`
+- `h-mesh-private-config`
+- private sensor-specific repositories where needed
 
 ## Gateway Scaffold
 

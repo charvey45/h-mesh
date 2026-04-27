@@ -11,6 +11,7 @@ from h_mesh_gateway.storage import GatewayStorage, parse_iso_timestamp
 
 
 FAILURE_OBSERVATION_KINDS = (
+    # Only count observation kinds that reflect an actual operator-visible failure.
     "publish_failed",
     "gateway_state_publish_failed",
     "mqtt_receive_timeout",
@@ -21,6 +22,7 @@ FAILURE_OBSERVATION_KINDS = (
 def tail_text_file(path: Path, *, max_lines: int = 200) -> list[str]:
     if not path.exists():
         return []
+    # The first dashboard cut favors portability over efficiency and reads the file directly.
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     return lines[-max_lines:]
 
@@ -119,6 +121,7 @@ class ManagementRepository:
                     continue
                 failure_counts[kind] = failure_counts.get(kind, 0) + count
 
+            # Keep the dashboard graph small and cheap so one busy gateway does not dominate page render time.
             health_history = list(reversed(storage.list_gateway_health_snapshots(limit=24)))
             gateways.append(
                 {
@@ -152,6 +155,7 @@ class ManagementRepository:
                 channels=("sensor",),
                 msg_types=("sensor_report",),
             ):
+                # Sensor summaries stay normalized here so simulated and future real sensors render the same way.
                 sensor_set, metric_summary = summarize_sensor_payload(str(event["payload_json"]))
                 recent_sensor_events.append(
                     {
@@ -451,6 +455,7 @@ def build_management_handler(repo: ManagementRepository):
                 return
 
             if parsed.path == "/api/summary":
+                # Keep the API contract aligned with the HTML dashboard so operators can script against one source.
                 self._respond_json(repo.management_snapshot())
                 return
 
