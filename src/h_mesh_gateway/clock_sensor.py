@@ -23,6 +23,7 @@ def build_clock_sensor_payload(
     iso_timestamp = observed_at.isoformat()
     minute_of_day = (observed_at.hour * 60) + observed_at.minute
 
+    # This payload intentionally follows the documented sensor_report envelope so the demo exercises the real path.
     return {
         "msg_type": "sensor_report",
         "msg_id": f"sensor-{source}-{observed_at.strftime('%Y%m%dT%H%M%S%fZ')}",
@@ -78,6 +79,7 @@ def run_clock_sensor(
             sensor_set=sensor_set,
             captured_at=now_provider(),
         )
+        # Route the synthetic sensor through the same gateway publish path used by future real sensors.
         result = service.simulate_rf_to_mqtt(payload, broker)
         reports.append(
             {
