@@ -12,6 +12,8 @@ from h_mesh_gateway.interfaces import BrokerAdapter, BrokerMessage, RadioAdapter
 
 
 class PahoMqttBrokerAdapter(BrokerAdapter):
+    # This is the real MQTT seam used by the CLI and Docker harness. The implementation is
+    # intentionally small and explicit so its connection, subscribe, and publish behavior is easy to trace.
     def __init__(
         self,
         *,
@@ -34,6 +36,8 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         return self._state
 
     def publish(self, topic: str, payload_json: str) -> None:
+        # Phase 1 publish uses a short-lived connect/publish/disconnect cycle. That keeps
+        # the code simple and makes each publish attempt easy to reason about.
         mqtt = self._load_mqtt()
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
         if self.username:
@@ -97,6 +101,7 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
             if int(reason_code) != 0:
                 self._state = BrokerState.DISCONNECTED
                 return
+            # Only after subscribe succeeds do we consider the consumer "ready" for healthchecks.
             connected_client.subscribe(topic, qos=1)
             self._state = BrokerState.CONNECTED
 
@@ -142,6 +147,7 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         try:
             import paho.mqtt.client as mqtt
         except ModuleNotFoundError as exc:
+            # Keep the dependency error actionable because fresh lab hosts commonly miss paho-mqtt.
             raise RuntimeError(
                 "paho-mqtt is required for MQTT adapter usage. Install project dependencies "
                 "or use the Docker harness."
@@ -151,6 +157,7 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
 
 @dataclass(slots=True)
 class InMemoryBrokerAdapter(BrokerAdapter):
+    # This adapter trades realism for speed and determinism in unit tests.
     published_messages: list[BrokerMessage] = field(default_factory=list)
     _state: BrokerState = BrokerState.CONNECTED
 
@@ -184,6 +191,7 @@ class InMemoryBrokerAdapter(BrokerAdapter):
         on_ready: Callable[[], None] | None = None,
     ) -> list[BrokerMessage]:
         del timeout_seconds
+        # There is no actual network handshake here, so readiness can be signaled immediately.
         if on_ready is not None:
             on_ready()
         matches: list[BrokerMessage] = []
@@ -199,6 +207,7 @@ class InMemoryBrokerAdapter(BrokerAdapter):
 
 @dataclass(slots=True)
 class FileRadioAdapter(RadioAdapter):
+    # The file-backed radio adapter gives integration tests a concrete artifact to inspect.
     output_path: Path
     state: RadioState = RadioState.HEALTHY
 
@@ -208,6 +217,7 @@ class FileRadioAdapter(RadioAdapter):
     def emit(self, payload_json: str) -> RadioEmission:
         if self.state != RadioState.HEALTHY:
             raise RuntimeError(f"Radio is not healthy: {self.state.value}")
+        # Create the parent directory on demand so callers only need to specify a target file.
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(payload_json, encoding="utf-8")
         return RadioEmission(path=self.output_path, payload_json=payload_json)
@@ -215,6 +225,7 @@ class FileRadioAdapter(RadioAdapter):
 
 @dataclass(slots=True)
 class InMemoryRadioAdapter(RadioAdapter):
+    # This adapter exists for service-level tests that only need to know an emission happened.
     state: RadioState = RadioState.HEALTHY
     emissions: deque[str] = field(default_factory=deque)
 
@@ -228,4 +239,5 @@ class InMemoryRadioAdapter(RadioAdapter):
         return RadioEmission(path=Path("<memory>"), payload_json=payload_json)
 
     def pop_emission(self) -> dict[str, object]:
+        # Tests usually care about decoded payload content rather than serialized JSON text.
         return json.loads(self.emissions.popleft())

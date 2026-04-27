@@ -11,6 +11,8 @@ GATEWAY_ID_RE = re.compile(r"^[a-z]g[0-9a-f]{2}$")
 
 @dataclass(slots=True)
 class MqttRuntimeConfig:
+    # Only expose non-secret values through as_dict() so validate-config stays safe to
+    # print in terminals and CI logs.
     host: str
     port: int
     username: str
@@ -30,6 +32,8 @@ class MqttRuntimeConfig:
 
 @dataclass(slots=True)
 class GatewayRuntimeConfig:
+    # This is the single resolved runtime view used by the CLI and service. Paths are
+    # normalized here so downstream code can focus on behavior rather than path handling.
     env_file: Path
     site_code: str
     gateway_id: str
@@ -67,6 +71,8 @@ def parse_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
+        # The example env files are intentionally comment-heavy, so treat comments and
+        # blank lines as first-class syntax.
         if not stripped or stripped.startswith("#"):
             continue
         if "=" not in stripped:
@@ -77,6 +83,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 def parse_bool(value: str, field_name: str) -> bool:
+    # Accept the boolean spellings operators are likely to type by hand.
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
@@ -86,6 +93,7 @@ def parse_bool(value: str, field_name: str) -> bool:
 
 
 def require_value(values: dict[str, str], key: str) -> str:
+    # Centralize required-value failures so config error messages stay consistent.
     value = values.get(key, "").strip()
     if not value:
         raise ValueError(f"Missing required config value: {key}")
@@ -93,6 +101,8 @@ def require_value(values: dict[str, str], key: str) -> str:
 
 
 def resolve_path(raw_path: str | None, base_dir: Path) -> Path | None:
+    # Relative paths resolve from the current working directory so the same example file
+    # can work in local and containerized contexts.
     if not raw_path:
         return None
     candidate = Path(raw_path)
@@ -102,6 +112,8 @@ def resolve_path(raw_path: str | None, base_dir: Path) -> Path | None:
 
 
 def validate_gateway_identity(site_code: str, gateway_id: str, device_role: str) -> None:
+    # The gateway identity contract drives docs, topic layout, and operator inventory.
+    # Reject mismatches early so bad identities do not leak into state or logs.
     if len(site_code) != 1 or not site_code.islower() or not site_code.isalpha():
         raise ValueError("SITE_CODE must be a single lowercase letter")
     if device_role != "gateway":
@@ -113,10 +125,13 @@ def validate_gateway_identity(site_code: str, gateway_id: str, device_role: str)
 
 
 def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
+    # Resolve the env path up front so later validation and path errors reference one
+    # canonical location.
     env_path = env_path.resolve()
     values = parse_env_file(env_path)
     base_dir = Path(os.getcwd()).resolve()
 
+    # Support DEVICE_CODE as a fallback because some examples still use the broader device vocabulary.
     site_code = require_value(values, "SITE_CODE")
     gateway_id = values.get("GATEWAY_ID", values.get("DEVICE_CODE", "")).strip()
     device_role = values.get("DEVICE_ROLE", "").strip() or "gateway"
@@ -126,6 +141,8 @@ def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
     if state_dir is None:
         raise ValueError("STATE_DIR must resolve to a valid path")
 
+    # Default the queue database into the state directory because queue state is a durable
+    # part of the gateway's local runtime footprint.
     queue_db_path = resolve_path(
         values.get("QUEUE_DB_PATH", str(state_dir / "queue.sqlite3")), base_dir
     )
@@ -133,6 +150,7 @@ def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
         raise ValueError("QUEUE_DB_PATH must resolve to a valid path")
 
     mqtt = MqttRuntimeConfig(
+        # The defaults here describe the simplest local lab broker shape.
         host=values.get("MQTT_HOST", "127.0.0.1").strip() or "127.0.0.1",
         port=int(values.get("MQTT_PORT", "1883")),
         username=values.get("MQTT_USERNAME", "").strip(),

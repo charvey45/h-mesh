@@ -1,3 +1,5 @@
+# Management-only stack.
+# Use this when you already have gateway state files and want the dashboard without the demo sensor.
 services:
   management-dashboard:
     build:
@@ -5,6 +7,7 @@ services:
       dockerfile: docker/dashboard/Dockerfile
     container_name: h-mesh-management-dashboard
     command:
+      # Run the dashboard against the mounted state directory inside the container.
       - python
       - -m
       - h_mesh_gateway
@@ -18,7 +21,9 @@ services:
       - --port
       - "8080"
     ports:
+      # Expose the operator dashboard on the host.
       - "8080:8080"
     volumes:
+      # Mount the host state directory so the dashboard can read SQLite state and logs.
       - ./state:/data/state
     restart: unless-stopped

@@ -1,15 +1,21 @@
+# Local lab broker only.
+# This is the smallest possible stack for validating MQTT connectivity from the gateway code.
 services:
   mqtt-broker:
+    # Pin a major version so the lab does not float unexpectedly.
     image: eclipse-mosquitto:2
     container_name: h-mesh-mqtt-lab
     restart: unless-stopped
     ports:
+      # Expose the standard MQTT listener to the host for local development.
       - "1883:1883"
     volumes:
+      # Keep config read-only and persist broker data/logs in named Docker volumes.
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
 
 volumes:
+  # Named volumes keep local test data between container restarts without polluting the repo.
   mosquitto_data:
   mosquitto_log:
