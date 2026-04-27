@@ -1,3 +1,9 @@
+"""Runtime configuration loading for the gateway scaffold.
+
+The helpers in this module convert comment-heavy example env files into a resolved
+runtime configuration object consumed by the CLI and service layers.
+"""
+
 from __future__ import annotations
 
 import os
@@ -11,8 +17,8 @@ GATEWAY_ID_RE = re.compile(r"^[a-z]g[0-9a-f]{2}$")
 
 @dataclass(slots=True)
 class MqttRuntimeConfig:
-    # Only expose non-secret values through as_dict() so validate-config stays safe to
-    # print in terminals and CI logs.
+    """Resolved MQTT connectivity settings for one gateway runtime."""
+
     host: str
     port: int
     username: str
@@ -21,6 +27,7 @@ class MqttRuntimeConfig:
     topic_prefix: str
 
     def as_dict(self) -> dict[str, object]:
+        """Render a safe-to-print view of the MQTT config."""
         return {
             "host": self.host,
             "port": self.port,
@@ -32,8 +39,12 @@ class MqttRuntimeConfig:
 
 @dataclass(slots=True)
 class GatewayRuntimeConfig:
-    # This is the single resolved runtime view used by the CLI and service. Paths are
-    # normalized here so downstream code can focus on behavior rather than path handling.
+    """Resolved gateway runtime configuration.
+
+    Paths are normalized here so downstream code can focus on behavior instead of
+    repeated path-resolution logic.
+    """
+
     env_file: Path
     site_code: str
     gateway_id: str
@@ -48,6 +59,7 @@ class GatewayRuntimeConfig:
     mqtt: MqttRuntimeConfig
 
     def as_dict(self) -> dict[str, object]:
+        """Render a safe-to-print view of the gateway config."""
         return {
             "env_file": str(self.env_file),
             "site_code": self.site_code,
@@ -65,14 +77,13 @@ class GatewayRuntimeConfig:
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
+    """Parse a simple KEY=VALUE env file into a dictionary."""
     if not path.exists():
         raise ValueError(f"Env file does not exist: {path}")
 
     values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
-        # The example env files are intentionally comment-heavy, so treat comments and
-        # blank lines as first-class syntax.
         if not stripped or stripped.startswith("#"):
             continue
         if "=" not in stripped:
@@ -83,7 +94,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 
 def parse_bool(value: str, field_name: str) -> bool:
-    # Accept the boolean spellings operators are likely to type by hand.
+    """Parse a human-edited boolean-like env value."""
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
@@ -93,7 +104,7 @@ def parse_bool(value: str, field_name: str) -> bool:
 
 
 def require_value(values: dict[str, str], key: str) -> str:
-    # Centralize required-value failures so config error messages stay consistent.
+    """Return a required config value or raise a helpful error."""
     value = values.get(key, "").strip()
     if not value:
         raise ValueError(f"Missing required config value: {key}")
@@ -101,8 +112,7 @@ def require_value(values: dict[str, str], key: str) -> str:
 
 
 def resolve_path(raw_path: str | None, base_dir: Path) -> Path | None:
-    # Relative paths resolve from the current working directory so the same example file
-    # can work in local and containerized contexts.
+    """Resolve an optional path relative to the current working directory."""
     if not raw_path:
         return None
     candidate = Path(raw_path)
@@ -112,8 +122,7 @@ def resolve_path(raw_path: str | None, base_dir: Path) -> Path | None:
 
 
 def validate_gateway_identity(site_code: str, gateway_id: str, device_role: str) -> None:
-    # The gateway identity contract drives docs, topic layout, and operator inventory.
-    # Reject mismatches early so bad identities do not leak into state or logs.
+    """Validate that the configured gateway identity matches repository conventions."""
     if len(site_code) != 1 or not site_code.islower() or not site_code.isalpha():
         raise ValueError("SITE_CODE must be a single lowercase letter")
     if device_role != "gateway":
@@ -125,8 +134,7 @@ def validate_gateway_identity(site_code: str, gateway_id: str, device_role: str)
 
 
 def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
-    # Resolve the env path up front so later validation and path errors reference one
-    # canonical location.
+    """Load, validate, and resolve gateway runtime configuration from an env file."""
     env_path = env_path.resolve()
     values = parse_env_file(env_path)
     base_dir = Path(os.getcwd()).resolve()
@@ -141,8 +149,6 @@ def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
     if state_dir is None:
         raise ValueError("STATE_DIR must resolve to a valid path")
 
-    # Default the queue database into the state directory because queue state is a durable
-    # part of the gateway's local runtime footprint.
     queue_db_path = resolve_path(
         values.get("QUEUE_DB_PATH", str(state_dir / "queue.sqlite3")), base_dir
     )
@@ -150,7 +156,6 @@ def load_runtime_config(env_path: Path) -> GatewayRuntimeConfig:
         raise ValueError("QUEUE_DB_PATH must resolve to a valid path")
 
     mqtt = MqttRuntimeConfig(
-        # The defaults here describe the simplest local lab broker shape.
         host=values.get("MQTT_HOST", "127.0.0.1").strip() or "127.0.0.1",
         port=int(values.get("MQTT_PORT", "1883")),
         username=values.get("MQTT_USERNAME", "").strip(),

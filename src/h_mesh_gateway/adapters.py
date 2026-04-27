@@ -1,3 +1,5 @@
+"""Broker and radio adapter implementations for lab and test workflows."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -12,8 +14,8 @@ from h_mesh_gateway.interfaces import BrokerAdapter, BrokerMessage, RadioAdapter
 
 
 class PahoMqttBrokerAdapter(BrokerAdapter):
-    # This is the real MQTT seam used by the CLI and Docker harness. The implementation is
-    # intentionally small and explicit so its connection, subscribe, and publish behavior is easy to trace.
+    """Real MQTT adapter backed by paho-mqtt."""
+
     def __init__(
         self,
         *,
@@ -33,11 +35,11 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
         self._state = BrokerState.UNKNOWN
 
     def current_state(self) -> BrokerState:
+        """Return the adapter's current broker-state view."""
         return self._state
 
     def publish(self, topic: str, payload_json: str) -> None:
-        # Phase 1 publish uses a short-lived connect/publish/disconnect cycle. That keeps
-        # the code simple and makes each publish attempt easy to reason about.
+        """Publish one JSON payload to a topic."""
         mqtt = self._load_mqtt()
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
         if self.username:
@@ -144,6 +146,7 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
 
     @staticmethod
     def _load_mqtt():
+        """Import and return the paho MQTT client module."""
         try:
             import paho.mqtt.client as mqtt
         except ModuleNotFoundError as exc:
@@ -157,11 +160,13 @@ class PahoMqttBrokerAdapter(BrokerAdapter):
 
 @dataclass(slots=True)
 class InMemoryBrokerAdapter(BrokerAdapter):
-    # This adapter trades realism for speed and determinism in unit tests.
+    """In-memory broker adapter for unit tests."""
+
     published_messages: list[BrokerMessage] = field(default_factory=list)
     _state: BrokerState = BrokerState.CONNECTED
 
     def current_state(self) -> BrokerState:
+        """Return the adapter's current broker-state view."""
         return self._state
 
     def publish(self, topic: str, payload_json: str) -> None:
@@ -191,7 +196,6 @@ class InMemoryBrokerAdapter(BrokerAdapter):
         on_ready: Callable[[], None] | None = None,
     ) -> list[BrokerMessage]:
         del timeout_seconds
-        # There is no actual network handshake here, so readiness can be signaled immediately.
         if on_ready is not None:
             on_ready()
         matches: list[BrokerMessage] = []
@@ -207,17 +211,19 @@ class InMemoryBrokerAdapter(BrokerAdapter):
 
 @dataclass(slots=True)
 class FileRadioAdapter(RadioAdapter):
-    # The file-backed radio adapter gives integration tests a concrete artifact to inspect.
+    """File-backed radio adapter used by integration tests."""
+
     output_path: Path
     state: RadioState = RadioState.HEALTHY
 
     def current_state(self) -> RadioState:
+        """Return the adapter's current radio-state view."""
         return self.state
 
     def emit(self, payload_json: str) -> RadioEmission:
+        """Write one emitted payload to the configured file path."""
         if self.state != RadioState.HEALTHY:
             raise RuntimeError(f"Radio is not healthy: {self.state.value}")
-        # Create the parent directory on demand so callers only need to specify a target file.
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(payload_json, encoding="utf-8")
         return RadioEmission(path=self.output_path, payload_json=payload_json)
@@ -225,19 +231,22 @@ class FileRadioAdapter(RadioAdapter):
 
 @dataclass(slots=True)
 class InMemoryRadioAdapter(RadioAdapter):
-    # This adapter exists for service-level tests that only need to know an emission happened.
+    """In-memory radio adapter for service-layer tests."""
+
     state: RadioState = RadioState.HEALTHY
     emissions: deque[str] = field(default_factory=deque)
 
     def current_state(self) -> RadioState:
+        """Return the adapter's current radio-state view."""
         return self.state
 
     def emit(self, payload_json: str) -> RadioEmission:
+        """Record one emitted payload in memory."""
         if self.state != RadioState.HEALTHY:
             raise RuntimeError(f"Radio is not healthy: {self.state.value}")
         self.emissions.append(payload_json)
         return RadioEmission(path=Path("<memory>"), payload_json=payload_json)
 
     def pop_emission(self) -> dict[str, object]:
-        # Tests usually care about decoded payload content rather than serialized JSON text.
+        """Pop and decode the oldest recorded emission."""
         return json.loads(self.emissions.popleft())

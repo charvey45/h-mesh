@@ -1,3 +1,5 @@
+"""Synthetic sensor publisher used by the management demo and lab workflows."""
+
 from __future__ import annotations
 
 import time
@@ -9,7 +11,7 @@ from h_mesh_gateway.service import GatewayService
 
 
 def utc_now() -> datetime:
-    # Isolate time acquisition so tests can inject deterministic timestamps.
+    """Return the current UTC time."""
     return datetime.now(timezone.utc)
 
 
@@ -20,11 +22,11 @@ def build_clock_sensor_payload(
     sensor_set: str = "clock",
     captured_at: datetime | None = None,
 ) -> dict[str, object]:
+    """Build a normalized synthetic sensor_report payload."""
     observed_at = captured_at or utc_now()
     iso_timestamp = observed_at.isoformat()
     minute_of_day = (observed_at.hour * 60) + observed_at.minute
 
-    # This payload intentionally follows the documented sensor_report envelope so the demo exercises the real path.
     return {
         "msg_type": "sensor_report",
         "msg_id": f"sensor-{source}-{observed_at.strftime('%Y%m%dT%H%M%S%fZ')}",
@@ -36,19 +38,16 @@ def build_clock_sensor_payload(
             "sensor_set": sensor_set,
             "metrics": [
                 {
-                    # epoch_s is useful as a universal machine-readable timestamp field.
                     "name": "epoch_s",
                     "value": int(observed_at.timestamp()),
                     "unit": "s",
                 },
                 {
-                    # minute_of_day makes it easy to spot daily cycles when looking at synthetic data.
                     "name": "minute_of_day",
                     "value": minute_of_day,
                     "unit": "m",
                 },
                 {
-                    # second_of_minute changes every publish and makes each sample visibly distinct.
                     "name": "second_of_minute",
                     "value": observed_at.second,
                     "unit": "s",
@@ -70,10 +69,10 @@ def run_clock_sensor(
     now_provider: Callable[[], datetime] = utc_now,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> dict[str, object]:
+    """Publish one or more synthetic sensor reports through the gateway service."""
     if not forever and count < 1:
         raise ValueError("count must be at least 1 when forever is false")
 
-    # Return a full run report so the CLI can print or serialize exactly what was emitted.
     reports: list[dict[str, object]] = []
     emitted_count = 0
 
@@ -84,7 +83,6 @@ def run_clock_sensor(
             sensor_set=sensor_set,
             captured_at=now_provider(),
         )
-        # Route the synthetic sensor through the same gateway publish path used by future real sensors.
         result = service.simulate_rf_to_mqtt(payload, broker)
         reports.append(
             {
@@ -96,7 +94,6 @@ def run_clock_sensor(
         )
         emitted_count += 1
         if forever or emitted_count < count:
-            # Sleep only between emissions so a finite run returns immediately after the last sample.
             sleep_fn(interval_seconds)
 
     return {
