@@ -1,0 +1,24 @@
+services:
+  management-dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: h-mesh-management-dashboard
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - run-dashboard
+      - --state-dir
+      - /data/state
+      - --log-dir
+      - /data/state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./state:/data/state
+    restart: unless-stopped
