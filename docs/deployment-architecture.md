@@ -240,7 +240,7 @@ Every component needs a rollback path before production rollout.
 
 ## Observability Requirements
 
-Deployment health is not just “process started.”
+Deployment health is not just "process started."
 
 Minimum management visibility should include:
 
