@@ -15,6 +15,7 @@ from h_mesh_gateway.health import (
 )
 from h_mesh_gateway.storage import (
     GatewayObservationRecord,
+    GatewayHealthSnapshotRecord,
     GatewayStorage,
     MessageEventRecord,
     OutboundQueueRecord,
@@ -63,6 +64,21 @@ class GatewayService:
             f"{self.config.gateway_id}/state"
         )
 
+    def _persist_health_snapshot(self, *, topic: str, delivery_state: str) -> None:
+        self.storage.record_gateway_health_snapshot(
+            GatewayHealthSnapshotRecord(
+                gateway_id=self.config.gateway_id,
+                site_code=self.config.site_code,
+                process_state=self.health.process_state.value,
+                broker_state=self.health.broker_state.value,
+                radio_state=self.health.radio_state.value,
+                queue_depth=self.health.queue_depth,
+                topic=topic,
+                delivery_state=delivery_state,
+                observed_at=self.health.observed_at.isoformat(),
+            )
+        )
+
     def _resolve_expiry(self, payload: dict[str, object]) -> str:
         expires_at = payload.get("expires_at")
         if isinstance(expires_at, str) and expires_at:
@@ -90,6 +106,7 @@ class GatewayService:
         payload_json = json.dumps(self.health.as_dict(), sort_keys=True)
         topic = self._health_topic()
         broker.publish(topic, payload_json)
+        self._persist_health_snapshot(topic=topic, delivery_state="published")
         self.storage.record_gateway_observation(
             GatewayObservationRecord(
                 gateway_id=self.config.gateway_id,
@@ -97,6 +114,7 @@ class GatewayService:
                 detail=f"Published health snapshot to {topic}",
             )
         )
+        LOGGER.info("Published gateway health snapshot for %s to %s", self.config.gateway_id, topic)
         return {
             "status": "published",
             "topic": topic,
@@ -119,12 +137,21 @@ class GatewayService:
                 queue_depth=queue_depth,
             )
         except RuntimeError as exc:
+            self._persist_health_snapshot(
+                topic=self._health_topic(),
+                delivery_state="local_only",
+            )
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
                     gateway_id=self.config.gateway_id,
                     kind="gateway_state_publish_failed",
                     detail=f"Failed to publish health snapshot: {exc}",
                 )
+            )
+            LOGGER.warning(
+                "Failed to publish gateway health snapshot for %s: %s",
+                self.config.gateway_id,
+                exc,
             )
             return None
 
@@ -168,6 +195,10 @@ class GatewayService:
                 status="pending",
             )
         )
+        self._persist_health_snapshot(
+            topic=self._health_topic(),
+            delivery_state="queued",
+        )
 
         LOGGER.info("Gateway skeleton prepared for %s", self.config.gateway_id)
         return {
@@ -195,6 +226,7 @@ class GatewayService:
         tables = self._initialize_storage()
         msg_id = str(payload["msg_id"])
         if self.storage.has_seen_message(msg_id):
+            LOGGER.info("Suppressed duplicate RF event %s at %s", msg_id, self.config.gateway_id)
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
                     gateway_id=self.config.gateway_id,
@@ -256,6 +288,12 @@ class GatewayService:
         try:
             broker.publish(topic, payload_json)
         except RuntimeError as exc:
+            LOGGER.warning(
+                "Queued outbound RF event %s at %s after broker publish failure: %s",
+                msg_id,
+                self.config.gateway_id,
+                exc,
+            )
             self.storage.mark_outbound_attempt(msg_id, status="retrying")
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
@@ -289,6 +327,7 @@ class GatewayService:
                 related_msg_id=msg_id,
             )
         )
+        LOGGER.info("Published RF event %s from %s to %s", msg_id, self.config.gateway_id, topic)
         return {
             "status": "published",
             "msg_id": msg_id,
@@ -310,6 +349,11 @@ class GatewayService:
     ) -> dict[str, object]:
         tables = self._initialize_storage()
         if radio.current_state() != RadioState.HEALTHY:
+            LOGGER.warning(
+                "Blocked MQTT to radio relay on %s because radio state is %s",
+                topic,
+                radio.current_state().value,
+            )
             health_report = self.maybe_publish_health_snapshot(
                 broker,
                 broker_state=broker.current_state(),
@@ -332,6 +376,7 @@ class GatewayService:
             }
         message = broker.receive_one(topic, timeout_seconds, on_ready=on_broker_ready)
         if message is None:
+            LOGGER.warning("Timed out waiting for MQTT message on %s", topic)
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
                     gateway_id=self.config.gateway_id,
@@ -349,6 +394,7 @@ class GatewayService:
         payload = json.loads(message.payload_json)
         msg_id = str(payload["msg_id"])
         if self.storage.has_seen_message(msg_id):
+            LOGGER.info("Suppressed duplicate MQTT event %s at %s", msg_id, self.config.gateway_id)
             self.storage.record_gateway_observation(
                 GatewayObservationRecord(
                     gateway_id=self.config.gateway_id,
@@ -407,6 +453,7 @@ class GatewayService:
                 related_msg_id=msg_id,
             )
         )
+        LOGGER.info("Emitted MQTT event %s from %s to local radio", msg_id, self.config.gateway_id)
         return {
             "status": "emitted",
             "msg_id": msg_id,

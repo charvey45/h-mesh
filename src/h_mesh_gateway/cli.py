@@ -142,9 +142,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def configure_logging(config: GatewayRuntimeConfig) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if config.log_file_path:
+        config.log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(config.log_file_path, encoding="utf-8"))
     logging.basicConfig(
         level=getattr(logging, config.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        handlers=handlers,
+        force=True,
     )
 
 

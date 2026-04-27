@@ -34,6 +34,24 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.site_code, "a")
         self.assertFalse(config.radio_enabled)
         self.assertEqual(config.mqtt.topic_prefix, "mesh/v1")
+        self.assertIsNone(config.log_file_path)
+
+    def test_log_file_path_is_resolved_when_configured(self) -> None:
+        env_path = self.write_env(
+            "\n".join(
+                [
+                    "SITE_CODE=a",
+                    "DEVICE_ROLE=gateway",
+                    "GATEWAY_ID=ag01",
+                    "MQTT_TLS_ENABLED=false",
+                    "LOG_FILE_PATH=./state/ag01.log",
+                ]
+            )
+        )
+
+        config = load_runtime_config(env_path)
+
+        self.assertTrue(str(config.log_file_path).endswith("state\\ag01.log"))
 
     def test_invalid_gateway_role_is_rejected(self) -> None:
         env_path = self.write_env(

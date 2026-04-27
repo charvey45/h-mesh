@@ -6,6 +6,7 @@ from pathlib import Path
 
 from h_mesh_gateway.storage import (
     DedupeRecord,
+    GatewayHealthSnapshotRecord,
     GatewayObservationRecord,
     GatewayStorage,
     MessageEventRecord,
@@ -27,6 +28,7 @@ class StorageTests(unittest.TestCase):
             tables,
             [
                 "dedupe_cache",
+                "gateway_health_snapshots",
                 "gateway_observations",
                 "message_events",
                 "outbound_queue",
@@ -75,6 +77,31 @@ class StorageTests(unittest.TestCase):
         self.assertGreater(observation_id, 0)
         self.assertGreater(event_id, 0)
 
+    def test_records_health_snapshot_and_latest_health(self) -> None:
+        storage = self.make_storage()
+        storage.initialize()
+
+        storage.record_gateway_health_snapshot(
+            GatewayHealthSnapshotRecord(
+                gateway_id="ag01",
+                site_code="a",
+                process_state="ready",
+                broker_state="connected",
+                radio_state="healthy",
+                queue_depth=2,
+                topic="mesh/v1/site-a/gateway/ag01/state",
+                delivery_state="published",
+                observed_at="2026-04-26T18:30:00+00:00",
+            )
+        )
+
+        latest = storage.latest_gateway_health()
+
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["gateway_id"], "ag01")
+        self.assertEqual(latest["queue_depth"], 2)
+        self.assertEqual(latest["delivery_state"], "published")
+
     def test_dedupe_cache_tracks_seen_message_ids(self) -> None:
         storage = self.make_storage()
         storage.initialize()
@@ -114,6 +141,7 @@ class StorageTests(unittest.TestCase):
         storage.mark_outbound_published("ops-test-0001")
         self.assertEqual(storage.queue_depth(), 0)
         self.assertEqual(storage.list_pending_outbound_events(), [])
+        self.assertEqual(storage.queue_status_counts()["published"], 1)
 
     def test_publish_completion_does_not_double_count_an_attempt(self) -> None:
         storage = self.make_storage()
