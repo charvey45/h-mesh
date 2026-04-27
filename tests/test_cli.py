@@ -111,3 +111,32 @@ class ObserveTopicCliTests(unittest.TestCase):
         observed = json.loads(stdout.getvalue())
         self.assertEqual(observed["status"], "timeout")
         self.assertEqual(observed["message_count"], 1)
+
+    def test_run_clock_sensor_emits_sensor_report_output(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        env_path = self.write_env(temp_dir)
+        broker = InMemoryBrokerAdapter()
+
+        stdout = io.StringIO()
+        with patch("h_mesh_gateway.cli.build_broker_adapter", return_value=broker):
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "run-clock-sensor",
+                        "--env",
+                        str(env_path),
+                        "--source",
+                        "as01",
+                        "--count",
+                        "1",
+                        "--interval-seconds",
+                        "0",
+                        "--json",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        observed = json.loads(stdout.getvalue())
+        self.assertEqual(observed["status"], "complete")
+        self.assertEqual(observed["source"], "as01")
+        self.assertEqual(observed["emitted_count"], 1)

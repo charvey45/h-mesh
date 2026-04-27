@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from h_mesh_gateway.adapters import FileRadioAdapter, PahoMqttBrokerAdapter
+from h_mesh_gateway.clock_sensor import run_clock_sensor
 from h_mesh_gateway.config import GatewayRuntimeConfig, load_runtime_config
 from h_mesh_gateway.dashboard import run_dashboard_server
 from h_mesh_gateway.health import RadioState
@@ -103,6 +104,43 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Render the health publish report as JSON.",
+    )
+
+    clock_sensor_parser = subparsers.add_parser(
+        "run-clock-sensor",
+        help="Publish synthetic clock-based sensor reports through the gateway path.",
+    )
+    clock_sensor_parser.add_argument("--env", required=True, help="Path to the env file.")
+    clock_sensor_parser.add_argument(
+        "--source",
+        help="Four-character device code for the simulated sensor. Defaults to [site]s01.",
+    )
+    clock_sensor_parser.add_argument(
+        "--sensor-set",
+        default="clock",
+        help="Logical sensor set name published in the synthetic payload.",
+    )
+    clock_sensor_parser.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        help="Number of reports to emit before exiting.",
+    )
+    clock_sensor_parser.add_argument(
+        "--interval-seconds",
+        type=float,
+        default=5.0,
+        help="Delay between reports when more than one report is emitted.",
+    )
+    clock_sensor_parser.add_argument(
+        "--forever",
+        action="store_true",
+        help="Continue emitting reports until interrupted.",
+    )
+    clock_sensor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Render the emission report as JSON when the command exits.",
     )
 
     observe_topic_parser = subparsers.add_parser(
@@ -303,6 +341,22 @@ def main(argv: list[str] | None = None) -> int:
         report = service.publish_health_snapshot(
             build_broker_adapter(config, client_suffix="health-publisher"),
             radio_state=RadioState.HEALTHY if config.radio_enabled else RadioState.MISSING,
+        )
+        render_payload(report, args.json)
+        return 0
+
+    if args.command == "run-clock-sensor":
+        config = load_runtime_config(Path(args.env))
+        configure_logging(config)
+        service = GatewayService(config)
+        report = run_clock_sensor(
+            service=service,
+            broker=build_broker_adapter(config, client_suffix="clock-sensor"),
+            source=args.source or f"{config.site_code}s01",
+            sensor_set=args.sensor_set,
+            count=args.count,
+            interval_seconds=args.interval_seconds,
+            forever=args.forever,
         )
         render_payload(report, args.json)
         return 0

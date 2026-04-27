@@ -538,6 +538,55 @@ class GatewayStorage:
             ).fetchall()
         return {str(row["kind"]): int(row["kind_count"]) for row in rows}
 
+    def list_recent_message_events(
+        self,
+        *,
+        limit: int = 100,
+        channels: tuple[str, ...] | None = None,
+        msg_types: tuple[str, ...] | None = None,
+    ) -> list[dict[str, Any]]:
+        where_clauses: list[str] = []
+        params: list[Any] = []
+
+        if channels:
+            where_clauses.append(",".join("channel = ?" for _ in channels))
+            params.extend(channels)
+        if msg_types:
+            where_clauses.append(",".join("msg_type = ?" for _ in msg_types))
+            params.extend(msg_types)
+
+        where_sql = ""
+        if where_clauses:
+            normalized = [f"({clause.replace(',', ' OR ')})" for clause in where_clauses]
+            where_sql = f"WHERE {' AND '.join(normalized)}"
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    event_id,
+                    msg_id,
+                    msg_type,
+                    source,
+                    source_site,
+                    target,
+                    target_scope,
+                    channel,
+                    captured_at,
+                    observed_by,
+                    direction,
+                    payload_json,
+                    status,
+                    stored_at
+                FROM message_events
+                {where_sql}
+                ORDER BY captured_at DESC, event_id DESC
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def mark_outbound_attempt(
         self,
         msg_id: str,

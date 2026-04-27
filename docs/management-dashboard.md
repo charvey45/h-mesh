@@ -19,6 +19,7 @@ The dashboard currently exposes:
 - queue status counts such as `pending`, `retrying`, and `published`
 - latest gateway health per gateway id
 - queue depth sparkline history per gateway
+- recent sensor traffic observed by the gateway
 - recent broker-path and radio-path failures
 - recent local gateway logs
 
@@ -60,6 +61,14 @@ The default local lab mapping uses:
 
 For Pi deployment, map a persistent host path such as `/srv/h-mesh/state` instead of a repo-relative directory.
 
+For a runnable local demo with synthetic sensor traffic, use:
+
+```powershell
+docker compose -f docker-compose.management-demo.yml up --build -d
+```
+
+That demo starts a broker, the dashboard, and a clock sensor publisher that continuously emits `sensor_report` messages as source `as01`.
+
 ## HTTP Surface
 
 The dashboard serves:
@@ -79,6 +88,7 @@ Current limits:
 - no S3 archival yet
 - no direct broker-internal metrics such as socket count or retained message count
 - failure counters are local gateway observations, not broker-native telemetry
+- sensor traffic visibility is based on stored `message_events`, not a dedicated timeseries store
 
 ## Next Evolution
 

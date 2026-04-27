@@ -1,0 +1,72 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: h-mesh-management-demo-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mosquitto_pub -h localhost -t h-mesh/healthcheck -m ok >/dev/null 2>&1
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - management_demo_mqtt_data:/mosquitto/data
+      - management_demo_mqtt_log:/mosquitto/log
+
+  management-dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: h-mesh-management-dashboard
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - run-dashboard
+      - --state-dir
+      - /data/state
+      - --log-dir
+      - /data/state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./state:/data/state
+    restart: unless-stopped
+
+  clock-sensor:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: h-mesh-clock-sensor
+    command:
+      - python
+      - -m
+      - h_mesh_gateway
+      - run-clock-sensor
+      - --env
+      - /app/config/examples/ag01.dashboard-demo.env.example
+      - --source
+      - as01
+      - --sensor-set
+      - clock
+      - --interval-seconds
+      - "5"
+      - --forever
+    depends_on:
+      mqtt-broker:
+        condition: service_healthy
+    volumes:
+      - ./state:/data/state
+    restart: unless-stopped
+
+volumes:
+  management_demo_mqtt_data:
+  management_demo_mqtt_log:

@@ -112,6 +112,13 @@ $env:PYTHONPATH = "src"
 python -m h_mesh_gateway publish-health --env config/examples/ag01.pi-sim.env.example --json
 ```
 
+Publish synthetic sensor traffic through the gateway path:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m h_mesh_gateway run-clock-sensor --env config/examples/site.lab.env.example --source as01 --count 3 --interval-seconds 2 --json
+```
+
 This scaffold now initializes the Phase 1 SQLite schema for `message_events`, `gateway_observations`, `outbound_queue`, and `dedupe_cache`, adds queue-state helpers for replay-safe bridge behavior, includes a real MQTT adapter seam plus simulated radio interfaces for early lab testing, and publishes `gateway_state` snapshots on the documented MQTT topic layout.
 
 ## Docker Integration Harness
@@ -145,6 +152,7 @@ The repository also includes a lightweight management dashboard that reads the s
 - latest gateway health
 - queue depth totals and queue status counts
 - recent broker-path and radio-path failures
+- recent synthetic or real sensor traffic seen by the gateway
 - recent local gateway logs
 
 Future S3-based archival is defined separately so the local dashboard-first deployment can stay simple while longer-term retention moves to cloud storage later.
@@ -156,3 +164,23 @@ docker compose -f docker-compose.management.yml up --build -d
 ```
 
 Then open `http://localhost:8080`.
+
+## Working Demo
+
+If you want something visible right now, use the demo stack:
+
+```powershell
+docker compose -f docker-compose.management-demo.yml up --build -d
+```
+
+This starts:
+
+- a local Mosquitto broker on `localhost:1883`
+- the management dashboard on `http://localhost:8080`
+- a synthetic clock sensor publisher that writes `sensor_report` traffic as source `as01`
+
+To stop it:
+
+```powershell
+docker compose -f docker-compose.management-demo.yml down
+```
